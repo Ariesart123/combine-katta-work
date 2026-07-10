@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mess Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-firestore-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#15121C; --bg-elev:#1C1826; --bg-elev2:#231D30;
+  --glass:rgba(255,255,255,0.055); --glass-strong:rgba(255,255,255,0.09);
+  --glass-border:rgba(255,255,255,0.10);
+  --text:#F3EEE6; --text-muted:#A79FB0; --text-dim:#786F87;
+  --accent:#E8A33D; --accent-soft:rgba(232,163,61,0.16);
+  --mint:#6FCF97; --mint-soft:rgba(111,207,151,0.14);
+  --terracotta:#EF6461; --terracotta-soft:rgba(239,100,97,0.14);
+  --indigo:#7EA8F5; --indigo-soft:rgba(126,168,245,0.14);
+  --radius:16px; --radius-sm:10px;
+  --shadow:0 8px 30px rgba(0,0,0,0.35);
+}
+[data-theme="light"]{
+  --bg:#F3EEE3; --bg-elev:#FFFFFF; --bg-elev2:#FBF7EE;
+  --glass:rgba(30,20,10,0.035); --glass-strong:rgba(30,20,10,0.06);
+  --glass-border:rgba(30,20,10,0.09);
+  --text:#2B2530; --text-muted:#756C81; --text-dim:#9A93A5;
+  --accent:#C7811E; --accent-soft:rgba(199,129,30,0.13);
+  --mint:#2C9A63; --mint-soft:rgba(44,154,99,0.12);
+  --terracotta:#C4453F; --terracotta-soft:rgba(196,69,63,0.12);
+  --indigo:#3E6FCB; --indigo-soft:rgba(62,111,203,0.12);
+  --shadow:0 8px 24px rgba(60,45,20,0.10);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+svg{width:1em; height:1em;}
+html{overflow-x:hidden; width:100%;}
+body{
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, var(--accent-soft), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, var(--indigo-soft), transparent 55%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+  overflow-x:hidden;
+  width:100%;
+  transition:background-color .3s, color .3s;
+}
+.mono{font-family:'JetBrains Mono',monospace;}
+.display{font-family:'Bricolage Grotesque',sans-serif;}
+button{font-family:inherit; cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+::selection{background:var(--accent-soft);}
+
+/* ---------- HEADER ---------- */
+#topbar{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; gap:14px;
+  padding:12px 20px;
+  background:rgba(20,17,28,0.72);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  border-bottom:1px solid var(--glass-border);
+}
+[data-theme="light"] #topbar{background:rgba(255,255,255,0.75);}
+#logo-wrap{
+  width:42px; height:42px; border-radius:12px; overflow:hidden; flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),#c9781f);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 14px rgba(232,163,61,0.35);
+}
+#logo-wrap img{width:100%;height:100%;object-fit:cover;}
+#logo-wrap svg{width:24px;height:24px;}
+#brand-block{display:flex; flex-direction:column; line-height:1.15; min-width:0; overflow:hidden;}
+#brand-name{font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#brand-owner{font-size:11.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#topbar .spacer{flex:1; min-width:4px;}
+#sync-status{flex-shrink:0;}
+@media(max-width:480px){
+  #topbar{padding:10px 12px; gap:8px;}
+  #logo-wrap{width:36px; height:36px;}
+  #brand-name{font-size:14px;}
+  #brand-owner{font-size:10px;}
+  .icon-btn{width:34px; height:34px;}
+}
+.icon-btn{
+  width:38px;height:38px;border-radius:10px;border:1px solid var(--glass-border);
+  background:var(--glass); color:var(--text); display:flex;align-items:center;justify-content:center;
+  transition:.15s;
+}
+.icon-btn:hover{background:var(--glass-strong);}
+.icon-btn svg{width:18px;height:18px;}
+
+/* ---------- LAYOUT ---------- */
+#shell{display:flex; min-height:calc(100vh - 66px);}
+#nav{
+  width:220px; flex-shrink:0; padding:18px 12px; position:sticky; top:66px;
+  height:calc(100vh - 66px); overflow-y:auto;
+  border-right:1px solid var(--glass-border);
+  display:flex; flex-direction:column; gap:3px;
+}
+.nav-item{
+  display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:11px;
+  color:var(--text-muted); font-size:13.5px; font-weight:500; border:1px solid transparent;
+  background:transparent; text-align:left; width:100%; transition:.15s;
+}
+.nav-item svg{width:17px;height:17px; flex-shrink:0;}
+.nav-item:hover{background:var(--glass); color:var(--text);}
+.nav-item.active{background:var(--accent-soft); color:var(--accent); border-color:rgba(232,163,61,0.25);}
+#main{flex:1; padding:24px 26px 90px; max-width:1180px; min-width:0;}
+
+.page-title{font-family:'Bricolage Grotesque',sans-serif; font-size:24px; font-weight:700; margin-bottom:4px;}
+.page-sub{color:var(--text-muted); font-size:13.5px; margin-bottom:20px;}
+
+/* ---------- CARDS / GLASS ---------- */
+.card{
+  background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
+  padding:18px; backdrop-filter:blur(6px);
+}
+.grid{display:grid; gap:14px; min-width:0;}
+.grid > *{min-width:0;}
+.g4{grid-template-columns:repeat(4,1fr);}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g2{grid-template-columns:repeat(2,1fr);}
+@media(max-width:980px){.g4{grid-template-columns:repeat(2,1fr);} .g3{grid-template-columns:repeat(2,1fr);}}
+
+.stat-card{display:flex; flex-direction:column; gap:8px;}
+.stat-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
+.stat-icon svg{width:17px;height:17px;}
+.stat-label{font-size:12px; color:var(--text-muted); font-weight:500;}
+.stat-value{font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700;}
+.stat-delta{font-size:11px; color:var(--text-dim);}
+
+/* buttons */
+.btn{
+  padding:9px 16px; border-radius:10px; border:1px solid var(--glass-border);
+  background:var(--glass-strong); color:var(--text); font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:7px;
+  transition:.15s;
+}
+.btn:hover{transform:translateY(-1px); box-shadow:var(--shadow);}
+.btn svg{width:15px;height:15px;}
+.btn-accent{background:linear-gradient(135deg,var(--accent),#c9781f); color:#1a1206; border:none;}
+.btn-ghost{background:transparent;}
+.btn-danger{background:var(--terracotta-soft); color:var(--terracotta); border-color:rgba(239,100,97,0.25);}
+.btn-mint{background:var(--mint-soft); color:var(--mint); border-color:rgba(111,207,151,0.25);}
+.btn-sm{padding:6px 11px; font-size:12px; border-radius:8px;}
+
+/* form */
+.field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px; min-width:0;}
+.field label{font-size:11.5px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em;}
+.field input, .field select, .field textarea{
+  background:var(--bg-elev2); border:1px solid var(--glass-border); border-radius:9px;
+  padding:9px 11px; color:var(--text); font-size:13.5px; outline:none; width:100%; min-width:0; max-width:100%;
+}
+.field input:focus, .field select:focus, .field textarea:focus{border-color:var(--accent);}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;}
+
+/* tags/badges */
+.badge{padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; display:inline-flex; align-items:center; gap:4px;}
+.badge-dine{background:var(--indigo-soft); color:var(--indigo);}
+.badge-dabba{background:var(--mint-soft); color:var(--mint);}
+.badge-paid{background:var(--mint-soft); color:var(--mint);}
+.badge-pending{background:var(--terracotta-soft); color:var(--terracotta);}
+
+/* table-ish list */
+.list-row{
+  display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:12px;
+  border:1px solid transparent; transition:.15s; flex-wrap:wrap; row-gap:8px;
+}
+.list-row:hover{background:var(--glass); border-color:var(--glass-border);}
+.avatar{
+  width:38px;height:38px;border-radius:11px; flex-shrink:0; display:flex;align-items:center;justify-content:center;
+  font-weight:700; font-size:14px; color:#1a1206;
+  background:linear-gradient(135deg,var(--accent),#c9781f);
+}
+.list-main{flex:1 1 130px; min-width:0;}
+.list-name{font-weight:600; font-size:14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; row-gap:4px;}
+.list-sub{font-size:12px; color:var(--text-muted); margin-top:2px; overflow-wrap:anywhere;}
+.list-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto;}
+@media(max-width:560px){
+  .list-actions{flex-basis:100%; margin-left:0; justify-content:flex-end;}
+}
+
+/* modal */
+.overlay{position:fixed; inset:0; background:rgba(10,8,14,0.6); backdrop-filter:blur(3px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;}
+.modal{background:var(--bg-elev); border:1px solid var(--glass-border); border-radius:18px; padding:22px; width:100%; max-width:440px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow);}
+.modal h3{font-family:'Bricolage Grotesque',sans-serif; margin-bottom:16px; font-size:18px;}
+.modal-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:16px;}
+
+/* toast */
+#toast-wrap{position:fixed; bottom:20px; right:20px; z-index:200; display:flex; flex-direction:column; gap:8px;}
+.toast{background:var(--bg-elev); border:1px solid var(--glass-border); padding:11px 16px; border-radius:11px; font-size:13px; box-shadow:var(--shadow); animation:slidein .2s ease;}
+@keyframes slidein{from{opacity:0; transform:translateY(8px);} to{opacity:1;transform:translateY(0);}}
+
+/* attendance toggle pills */
+.meal-toggle{display:flex; gap:6px;}
+.meal-pill{
+  padding:6px 12px; border-radius:9px; border:1px solid var(--glass-border); background:var(--bg-elev2);
+  font-size:12px; font-weight:600; color:var(--text-muted); display:flex; align-items:center; gap:5px;
+}
+.meal-pill.on{background:var(--mint-soft); color:var(--mint); border-color:rgba(111,207,151,0.3);}
+
+/* empty state */
+.empty{text-align:center; padding:50px 20px; color:var(--text-muted);}
+.empty svg{width:44px;height:44px; margin-bottom:12px; opacity:.5;}
+
+/* thali ring (signature) */
+.thali-wrap{display:flex; align-items:center; gap:18px;}
+.thali-legend{display:flex; flex-direction:column; gap:10px; font-size:12.5px;}
+.dot{width:9px;height:9px;border-radius:50%; display:inline-block;}
+
+/* search */
+.search-bar{display:flex; align-items:center; gap:8px; background:var(--bg-elev2); border:1px solid var(--glass-border); border-radius:11px; padding:9px 12px; margin-bottom:14px;}
+.search-bar svg{width:15px;height:15px; color:var(--text-dim);}
+.mix-icon svg{width:18px;height:18px; display:block;}
+.mix-icon{display:inline-flex; flex-shrink:0;}
+.search-bar input{background:none; border:none; outline:none; color:var(--text); flex:1; font-size:13.5px;}
+
+/* mobile nav */
+#mobnav{display:none;}
+@media(max-width:820px){
+  #nav{display:none;}
+  #main{padding:16px 14px 90px;}
+  #mobnav{
+    display:flex; position:fixed; bottom:0; left:0; right:0; z-index:60;
+    background:rgba(20,17,28,0.85); backdrop-filter:blur(16px); border-top:1px solid var(--glass-border);
+    padding:8px 2px; justify-content:space-around; overflow-x:auto;
+  }
+  [data-theme="light"] #mobnav{background:rgba(255,255,255,0.85);}
+  .mobnav-item{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-dim); font-size:9px; background:none; border:none; padding:4px 5px; flex:1 1 auto; min-width:0;}
+  .mobnav-item svg{width:18px;height:18px;}
+  .mobnav-item.active{color:var(--accent);}
+  .g4,.g3,.g2{grid-template-columns:1fr 1fr;}
+  #brand-name{font-size:15px;}
+  #sync-status .sync-label{display:none;}
+  .card{padding:14px;}
+  .stat-value{font-size:18px;}
+  .row2{grid-template-columns:1fr;}
+  .thali-wrap{flex-wrap:wrap;}
+  .bar-chart{gap:5px;}
+}
+.section-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px;}
+.section-head h3{font-family:'Bricolage Grotesque',sans-serif; font-size:15px; font-weight:700;}
+.date-nav{display:flex; align-items:center; gap:8px;}
+.date-nav .icon-btn{width:32px;height:32px;}
+.member-detail-header{display:flex; align-items:center; gap:14px; margin-bottom:18px;}
+.big-avatar{width:56px;height:56px;border-radius:15px; font-size:20px;}
+.timeline-item{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--glass-border); font-size:13px;}
+.timeline-item:last-child{border-bottom:none;}
+.timeline-date{color:var(--text-dim); font-size:11px; width:74px; flex-shrink:0;}
+.bar-chart{display:flex; align-items:flex-end; gap:8px; height:110px; padding-top:10px;}
+.bar-col{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; justify-content:flex-end; height:100%;}
+.bar{width:100%; border-radius:6px 6px 0 0; background:linear-gradient(180deg,var(--accent),rgba(232,163,61,0.4)); min-height:3px;}
+.bar-label{font-size:9.5px; color:var(--text-dim);}
+</style>
+</head>
+<body data-theme="dark">
+
+<div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div class="card" style="max-width:380px; width:100%;">
+    <div style="text-align:center; margin-bottom:18px;">
+      <div style="width:48px;height:48px;border-radius:13px; margin:0 auto 12px; background:linear-gradient(135deg,var(--accent),#c9781f); display:flex; align-items:center; justify-content:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1a1206" stroke-width="2" style="width:26px;height:26px;"><path d="M4 3h16M4 3v18M20 3v18M4 21h16M8 3v18M16 3v18"/></svg>
+      </div>
+      <div class="display" style="font-size:19px; font-weight:700;">Mess Manager Login</div>
+      <div class="page-sub" style="margin-bottom:0;">Cloud database se connect ho raha hai — apna owner email/password daalo</div>
+    </div>
+    <div class="field"><label>Email</label><input id="login-email" type="email" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
+    <div id="login-error" style="color:var(--terracotta); font-size:12.5px; margin-bottom:10px; display:none;"></div>
+    <button class="btn btn-accent" id="login-btn" style="width:100%;">Login</button>
+  </div>
+</div>
+
+<div id="app-shell" style="display:none;">
+<div id="topbar">
+  <div id="logo-wrap"><img id="logo-img" style="display:none;"><svg id="logo-fallback" viewBox="0 0 24 24" fill="none" stroke="#1a1206" stroke-width="2"><path d="M4 3h16M4 3v18M20 3v18M4 21h16M8 3v18M16 3v18"/></svg></div>
+  <div id="brand-block">
+    <span id="brand-name" class="display">Mess Manager</span>
+    <span id="brand-owner">Set owner name in Settings</span>
+  </div>
+  <div class="spacer"></div>
+  <span id="sync-status" style="font-size:11px; color:var(--text-dim); margin-right:6px; display:flex; align-items:center; gap:5px;"></span>
+  <button class="icon-btn" id="theme-toggle" title="Toggle theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+  </button>
+  <button class="icon-btn" id="logout-btn" title="Logout">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+  </button>
+</div>
+
+<div id="shell">
+  <div id="nav"></div>
+  <div id="main"></div>
+</div>
+
+<div id="mobnav"></div>
+</div>
+<div id="toast-wrap"></div>
+
+
+<script>
+/* ============ ICONS ============ */
+const ICONS = {
+  dashboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>',
+  members:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+  attendance:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>',
+  tiffin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M8 8V6a4 4 0 018 0v2"/><path d="M4 13h16"/></svg>',
+  payments:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  expenses:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+  reports:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15 1.65 1.65 0 003.17 14H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
+  star:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>',
+  starOutline:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>',
+  undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-15-6.7L3 13"/></svg>',
+  chevL:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>',
+  chevR:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>',
+  upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
+  wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>',
+  trend:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
+  qr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v.01"/></svg>',
+  whatsapp:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M17.6 6.32A8.86 8.86 0 0012.05 4a8.94 8.94 0 00-7.75 13.4L3 21l3.72-1.24a8.93 8.93 0 004.33 1.1h0a8.94 8.94 0 008.94-8.94 8.86 8.86 0 00-2.39-6.6zm-5.55 13.7h0a7.4 7.4 0 01-3.78-1.03l-.27-.16-2.8.93.94-2.73-.18-.28a7.42 7.42 0 1113.79-3.95 7.42 7.42 0 01-7.7 7.22zm4.07-5.56c-.22-.11-1.32-.65-1.53-.73-.2-.08-.35-.11-.5.11-.15.22-.58.73-.71.88-.13.15-.26.16-.48.05-.22-.11-.94-.35-1.79-1.11a6.7 6.7 0 01-1.24-1.55c-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.22-.69-1.67-.18-.44-.36-.38-.5-.38-.13 0-.28-.01-.43-.01a.83.83 0 00-.6.28c-.2.22-.79.77-.79 1.88s.81 2.18.92 2.33c.11.15 1.6 2.44 3.87 3.42.54.23.96.37 1.29.48.54.17 1.03.15 1.42.09.43-.06 1.32-.54 1.51-1.06.19-.52.19-.96.13-1.06-.06-.09-.2-.15-.42-.26z"/></svg>',
+  sms:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+  walkin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M9 22l1-8-2-1 1-5 3-2 3 2 1 5-2 1 1 8"/></svg>',
+  history:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>'
+};
+
+/* ============ STATE ============ */
+let state = null;
+let currentView = 'dashboard';
+let currentMemberId = null;
+let currentDate = todayStr();
+let lastAction = null; // for undo
+let memberSearch = '';
+let currentReminderMemberId = null;
+let currentReminderMessage = '';
+let currentReminderAmount = 0;
+let currentReminderDueDate = '';
+
+function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function fmtDate(s){
+  const d = new Date(s+'T00:00:00');
+  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+}
+function fmtMoney(n){ return '₹' + (Math.round(n*100)/100).toLocaleString('en-IN'); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function defaultState(){
+  return {
+    settings:{
+      messName:'My Mess', ownerName:'', logo:null, contactNumber:'', googleMapsLink:'',
+      lunchPrice:70, dinnerPrice:80, price1x:1700, price2x:3200, dabba1x:30, dabba2x:60,
+      upiId:'', upiName:''
+    },
+    members:[],
+    attendance:{}, // date -> {memberId:{lunch:bool,dinner:bool}}
+    payments:[],
+    expenses:[],
+    staff:[], // {id, name, role}
+    reminders:[], // {id, memberId, name, amount, dueDate, sentDate, channel}
+    walkins:[], // {id, name, phone, amount, date, note}
+    customPlans:[] // {id, name, price}
+  };
+}
+
+const STORAGE_KEY = 'messManagerData_v1';
+const canUseLocalStorage = (function(){
+  try{ const k='__msstest__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }
+  catch(e){ return false; }
+})();
+
+/* ---- Firebase ---- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCLsQn6OPsdw8HTwujN0ps4IPyzwuhhj8M",
+  authDomain: "combine-katta-mess.firebaseapp.com",
+  projectId: "combine-katta-mess",
+  storageBucket: "combine-katta-mess.firebasestorage.app",
+  messagingSenderId: "392301628743",
+  appId: "1:392301628743:web:8ab84b5f221d70fd8b5062"
+};
+let fbApp=null, fbAuth=null, fbDb=null, fbUser=null, firebaseReady=false;
+const SHARED_DOC_ID = 'shared'; // all authorized owner emails read/write this same document
+try{
+  if(typeof firebase!=='undefined'){
+    fbApp = firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    firebaseReady = true;
+  }
+}catch(e){ firebaseReady = false; }
+
+function setSyncStatus(mode){
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  if(mode==='cloud') el.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:var(--mint);display:inline-block;flex-shrink:0;"></span><span class="sync-label">Cloud synced</span>`;
+  else if(mode==='local') el.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0;"></span><span class="sync-label">Local only</span>`;
+  else if(mode==='error') el.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:var(--terracotta);display:inline-block;flex-shrink:0;"></span><span class="sync-label">Sync error</span>`;
+}
+
+async function loadState(){
+  state = null;
+  if(firebaseReady && fbUser){
+    try{
+      const sharedDoc = await fbDb.collection('messData').doc(SHARED_DOC_ID).get();
+      if(sharedDoc.exists && sharedDoc.data().data){
+        state = JSON.parse(sharedDoc.data().data);
+        setSyncStatus('cloud');
+      } else {
+        // Migrate legacy per-user data (from before shared login was supported) into the shared doc
+        const legacyDoc = await fbDb.collection('messData').doc(fbUser.uid).get();
+        if(legacyDoc.exists && legacyDoc.data().data){
+          state = JSON.parse(legacyDoc.data().data);
+          await fbDb.collection('messData').doc(SHARED_DOC_ID).set({
+            data: JSON.stringify(state),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          setSyncStatus('cloud');
+        }
+      }
+    }catch(e){ setSyncStatus('error'); }
+  }
+  if(!state && canUseLocalStorage){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) state = JSON.parse(raw);
+      if(state) setSyncStatus(firebaseReady && fbUser ? 'error' : 'local');
+    }catch(e){ /* ignore, will use defaults */ }
+  }
+  if(!state || !state.settings) state = defaultState();
+  if(!state.staff) state.staff = [];
+  if(!state.reminders) state.reminders = [];
+  if(!state.walkins) state.walkins = [];
+  if(!state.customPlans) state.customPlans = [];
+}
+
+let saveTimer=null;
+function saveState(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    let cloudOk = false;
+    if(firebaseReady && fbUser){
+      try{
+        await fbDb.collection('messData').doc(SHARED_DOC_ID).set({
+          data: JSON.stringify(state),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        cloudOk = true;
+      }catch(e){ /* offline or write failed — will rely on local cache below */ }
+    }
+    let localOk = false;
+    if(canUseLocalStorage){
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localOk = true; }
+      catch(e){ /* localStorage failed too */ }
+    }
+    if(cloudOk) setSyncStatus('cloud');
+    else if(localOk){ setSyncStatus(firebaseReady && fbUser ? 'error' : 'local'); if(firebaseReady && fbUser) toast('Cloud save fail hua — internet check karo. Data local me safe hai.', 'danger'); }
+    else toast('Save failed — browser storage blocked hai. Settings → Download Backup use karo.', 'danger');
+  }, 250);
+}
+
+function toast(msg, kind){
+  const el = document.createElement('div');
+  el.className='toast';
+  if(kind==='danger') el.style.borderColor='rgba(239,100,97,0.4)';
+  if(kind==='mint') el.style.borderColor='rgba(111,207,151,0.4)';
+  el.textContent = msg;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(()=>el.remove(), 2600);
+}
+
+/* ============ MEMBER FINANCE HELPERS ============ */
+function addDaysStr(dateStr, n){
+  const d = new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function daysDiff(dateA, dateB){
+  // dateB - dateA, in whole days
+  const a = new Date(dateA+'T00:00:00'), b = new Date(dateB+'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+function isPresentOnDate(memberId, date){
+  const rec = state.attendance[date] && state.attendance[date][memberId];
+  return !!(rec && (rec.lunch || rec.dinner));
+}
+function countAbsentDays(memberId, startDate, endDate){
+  // counts days in [startDate, endDate] (inclusive) where member was not marked present
+  let count = 0;
+  const end = new Date(endDate+'T00:00:00');
+  let d = new Date(startDate+'T00:00:00');
+  while(d <= end){
+    const ds = d.toISOString().slice(0,10);
+    if(!isPresentOnDate(memberId, ds)) count++;
+    d.setDate(d.getDate()+1);
+  }
+  return count;
+}
+function getPlanInfo(billingPlan){
+  if(billingPlan==='1x') return {label:'1-Time Mess Monthly', rate:Number(state.settings.price1x)||0, dabbaCount:Number(state.settings.dabba1x)||0};
+  if(billingPlan==='2x') return {label:'2-Time Mess Monthly', rate:Number(state.settings.price2x)||0, dabbaCount:Number(state.settings.dabba2x)||0};
+  if(billingPlan && billingPlan.startsWith('plan:')){
+    const cp = (state.customPlans||[]).find(p=>p.id===billingPlan.slice(5));
+    if(cp) return {label:cp.name, rate:Number(cp.price)||0, dabbaCount:Number(cp.dabbaCount)||0};
+  }
+  return null; // per-meal or unrecognized plan
+}
+// Computes every 30-effective-day billing cycle from join date up to today.
+// A cycle is normally 30 calendar days, but each day the member is absent (not marked present)
+// adds one recovery day to that same cycle, pushing the cycle end forward until it stabilizes.
+function getMemberCycles(m){
+  const today = todayStr();
+  const cycles = [];
+  let cycleStart = m.joinDate;
+  let guard = 0;
+  while(guard++ < 500){ // safety cap so a bad date can't infinite-loop
+    let end = addDaysStr(cycleStart, 29);
+    for(let i=0;i<50;i++){
+      const boundedEnd = end < today ? end : today;
+      const absent = countAbsentDays(m.id, cycleStart, boundedEnd);
+      const newEnd = addDaysStr(cycleStart, 29 + absent);
+      if(newEnd === end) break;
+      end = newEnd;
+    }
+    cycles.push({start:cycleStart, end});
+    if(end >= today) break;
+    cycleStart = addDaysStr(end, 1);
+  }
+  return cycles;
+}
+function getCurrentCycleStats(m){
+  const info = getPlanInfo(m.billingPlan || 'permeal');
+  if(!info) return null; // per-meal members don't have cycles
+  const cycles = getMemberCycles(m);
+  const cur = cycles[cycles.length-1];
+  const today = todayStr();
+  const boundedEnd = cur.end < today ? cur.end : today;
+  let presentDays=0, totalMeals=0;
+  const end = new Date(boundedEnd+'T00:00:00');
+  let d = new Date(cur.start+'T00:00:00');
+  while(d <= end){
+    const ds = d.toISOString().slice(0,10);
+    const rec = state.attendance[ds] && state.attendance[ds][m.id];
+    if(rec){
+      if(rec.lunch) totalMeals++;
+      if(rec.dinner) totalMeals++;
+      if(rec.lunch || rec.dinner) presentDays++;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  const absentDays = daysDiff(cur.start, boundedEnd) + 1 - presentDays;
+  const dabbaAllocated = info.dabbaCount || 0;
+  const dabbaRemaining = Math.max(0, dabbaAllocated - totalMeals);
+  const daysUntilEnd = daysDiff(today, cur.end);
+  return {
+    cycleStart: cur.start, cycleEnd: cur.end, cycleNumber: cycles.length,
+    presentDays, absentDays, totalMeals, dabbaAllocated, dabbaRemaining, daysUntilEnd
+  };
+}
+function memberCharges(m){
+  const plan = m.billingPlan || 'permeal';
+  const info = getPlanInfo(plan);
+  if(info){
+    const cycles = getMemberCycles(m);
+    return cycles.length * info.rate;
+  }
+  // per-meal: sum charges from attendance since join, based on per-meal price
+  let total = 0;
+  for(const date in state.attendance){
+    if(date < m.joinDate) continue;
+    const rec = state.attendance[date][m.id];
+    if(!rec) continue;
+    if(rec.lunch) total += Number(state.settings.lunchPrice)||0;
+    if(rec.dinner) total += Number(state.settings.dinnerPrice)||0;
+  }
+  return total;
+}
+function memberPaid(m){
+  return state.payments.filter(p=>p.memberId===m.id).reduce((s,p)=>s+Number(p.amount),0);
+}
+function memberPending(m){
+  return Math.max(0, memberCharges(m) - memberPaid(m));
+}
+function billingBadge(m){
+  const info = getPlanInfo(m.billingPlan || 'permeal');
+  if(!info) return '';
+  return `<span class="badge" style="background:var(--indigo-soft); color:var(--indigo);">${info.label}</span>`;
+}
+
+/* ============ NAV ============ */
+const NAV_ITEMS = [
+  {id:'dashboard', label:'Dashboard', icon:'dashboard'},
+  {id:'walkins', label:'Walk-ins', icon:'walkin'},
+  {id:'members', label:'Members', icon:'members'},
+  {id:'attendance', label:'Attendance', icon:'attendance'},
+  {id:'tiffin', label:'Tiffin / Dabba', icon:'tiffin'},
+  {id:'payments', label:'Payments', icon:'payments'},
+  {id:'reminders', label:'Reminders', icon:'bell'},
+  {id:'expenses', label:'Expenses', icon:'expenses'},
+  {id:'reports', label:'Reports', icon:'reports'},
+  {id:'settings', label:'Settings', icon:'settings'}
+];
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = NAV_ITEMS.map(i=>`
+    <button class="nav-item ${currentView===i.id?'active':''}" data-nav="${i.id}">
+      ${ICONS[i.icon]}<span>${i.label}</span>
+    </button>`).join('');
+  nav.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>navigate(b.dataset.nav));
+
+  const mob = document.getElementById('mobnav');
+  const mobPrimary = ['dashboard','attendance','payments','walkins'];
+  const moreIds = ['members','tiffin','reminders','expenses','reports','settings'];
+  const moreActive = moreIds.includes(currentView);
+  mob.innerHTML = mobPrimary.map(id=>{
+    const item = NAV_ITEMS.find(n=>n.id===id);
+    return `<button class="mobnav-item ${currentView===id?'active':''}" data-nav="${id}">${ICONS[item.icon]}<span>${item.label.split(' ')[0]}</span></button>`;
+  }).join('') + `<button class="mobnav-item ${moreActive?'active':''}" id="mobnav-more">${ICONS.more}<span>More</span></button>`;
+  mob.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>navigate(b.dataset.nav));
+  const moreBtn = document.getElementById('mobnav-more');
+  if(moreBtn) moreBtn.onclick = ()=>openMoreMenu(moreIds);
+}
+function openMoreMenu(ids){
+  const el = openModal(`
+    <h3>More</h3>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      ${ids.map(id=>{
+        const item = NAV_ITEMS.find(n=>n.id===id);
+        return `<button class="nav-item" data-more-nav="${id}" style="border:1px solid var(--glass-border);">${ICONS[item.icon]}<span>${item.label}</span></button>`;
+      }).join('')}
+    </div>`);
+  el.querySelectorAll('[data-more-nav]').forEach(b=>b.onclick = ()=>{ navigate(b.dataset.moreNav); el.remove(); });
+}
+function navigate(view, memberId){
+  currentView = view;
+  if(memberId) currentMemberId = memberId;
+  render();
+  window.scrollTo(0,0);
+}
+
+/* ============ HEADER ============ */
+function renderHeader(){
+  document.getElementById('brand-name').textContent = state.settings.messName || 'My Mess';
+  document.getElementById('brand-owner').textContent = state.settings.ownerName ? 'Owner: '+state.settings.ownerName : 'Set owner name in Settings';
+  const img = document.getElementById('logo-img');
+  const fb = document.getElementById('logo-fallback');
+  if(state.settings.logo){ img.src = state.settings.logo; img.style.display='block'; fb.style.display='none'; }
+  else{ img.style.display='none'; fb.style.display='block'; }
+}
+
+/* ============ RENDER ROOT ============ */
+function render(){
+  renderNav();
+  renderHeader();
+  const main = document.getElementById('main');
+  if(currentView==='dashboard') main.innerHTML = viewDashboard();
+  else if(currentView==='walkins') main.innerHTML = viewWalkins();
+  else if(currentView==='members') main.innerHTML = viewMembers();
+  else if(currentView==='memberDetail') main.innerHTML = viewMemberDetail();
+  else if(currentView==='attendance') main.innerHTML = viewAttendance();
+  else if(currentView==='tiffin') main.innerHTML = viewTiffin();
+  else if(currentView==='payments') main.innerHTML = viewPayments();
+  else if(currentView==='reminders') main.innerHTML = viewReminders();
+  else if(currentView==='expenses') main.innerHTML = viewExpenses();
+  else if(currentView==='reports') main.innerHTML = viewReports();
+  else if(currentView==='settings') main.innerHTML = viewSettings();
+  else if(currentView==='monthHistory') main.innerHTML = viewMonthHistory();
+  bindViewEvents();
+}
+
+/* ============ DASHBOARD ============ */
+function viewDashboard(){
+  const today = todayStr();
+  const todayAtt = state.attendance[today] || {};
+  const activeMembers = state.members.filter(m=>m.active!==false);
+  let lunchCount=0, dinnerCount=0;
+  activeMembers.forEach(m=>{ const r=todayAtt[m.id]; if(r){ if(r.lunch) lunchCount++; if(r.dinner) dinnerCount++; } });
+
+  const todayCollection = state.payments.filter(p=>p.date===today).reduce((s,p)=>s+Number(p.amount),0)
+    + (state.walkins||[]).filter(w=>w.date===today).reduce((s,w)=>s+Number(w.amount),0);
+  const todayExpenses = state.expenses.filter(e=>e.date===today).reduce((s,e)=>s+Number(e.amount),0);
+  const totalPending = activeMembers.reduce((s,m)=>s+memberPending(m),0);
+
+  const monthPrefix = today.slice(0,7);
+  const monthCollection = state.payments.filter(p=>p.date.startsWith(monthPrefix)).reduce((s,p)=>s+Number(p.amount),0)
+    + (state.walkins||[]).filter(w=>w.date.startsWith(monthPrefix)).reduce((s,w)=>s+Number(w.amount),0);
+  const monthExpenses = state.expenses.filter(e=>e.date.startsWith(monthPrefix)).reduce((s,e)=>s+Number(e.amount),0);
+  const profit = monthCollection - monthExpenses;
+
+  const expiringSoon = activeMembers.map(m=>({m, cycle:getCurrentCycleStats(m)}))
+    .filter(x=>x.cycle && (x.cycle.daysUntilEnd<=5 || (x.cycle.dabbaAllocated>0 && x.cycle.dabbaRemaining<=5)))
+    .sort((a,b)=>a.cycle.daysUntilEnd-b.cycle.daysUntilEnd);
+
+  const total = activeMembers.length || 1;
+  const lunchPct = Math.round((lunchCount/total)*100);
+  const dinnerPct = Math.round((dinnerCount/total)*100);
+  const r=42, circ=2*Math.PI*r;
+
+  // last 7 days collection bar
+  const days=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const ds=d.toISOString().slice(0,10);
+    const amt = state.payments.filter(p=>p.date===ds).reduce((s,p)=>s+Number(p.amount),0)
+      + (state.walkins||[]).filter(w=>w.date===ds).reduce((s,w)=>s+Number(w.amount),0);
+    days.push({ds, amt, label:d.toLocaleDateString('en-IN',{weekday:'short'})});
+  }
+  const maxAmt = Math.max(...days.map(d=>d.amt), 1);
+
+  const recent = [...state.payments.map(p=>({...p,kind:'payment'})), ...state.expenses.map(e=>({...e,kind:'expense'})), ...(state.walkins||[]).map(w=>({...w,kind:'walkin'}))]
+    .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+
+  return `
+  <div class="page-title">Dashboard</div>
+  <div class="page-sub">${fmtDate(today)} · Aaj ka overview</div>
+
+  <div class="grid g4" style="margin-bottom:16px;">
+    <div class="card stat-card">
+      <div class="stat-icon" style="background:var(--indigo-soft); color:var(--indigo);">${ICONS.members}</div>
+      <div class="stat-label">Active Members</div>
+      <div class="stat-value">${activeMembers.length}</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon" style="background:var(--mint-soft); color:var(--mint);">${ICONS.wallet}</div>
+      <div class="stat-label">Today's Collection</div>
+      <div class="stat-value">${fmtMoney(todayCollection)}</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon" style="background:var(--terracotta-soft); color:var(--terracotta);">${ICONS.bell}</div>
+      <div class="stat-label">Total Pending</div>
+      <div class="stat-value">${fmtMoney(totalPending)}</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon" style="background:var(--accent-soft); color:var(--accent);">${ICONS.trend}</div>
+      <div class="stat-label">This Month P/L</div>
+      <div class="stat-value" style="color:${profit>=0?'var(--mint)':'var(--terracotta)'}">${fmtMoney(profit)}</div>
+      <div class="stat-delta">Collection ${fmtMoney(monthCollection)} · Expenses ${fmtMoney(monthExpenses)}</div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="align-items:start;">
+    <div class="card">
+      <div class="section-head"><h3>Today's Meals</h3></div>
+      <div class="thali-wrap">
+        <svg width="110" height="110" viewBox="0 0 110 110">
+          <circle cx="55" cy="55" r="${r}" fill="none" stroke="var(--glass-border)" stroke-width="10"/>
+          <circle cx="55" cy="55" r="${r}" fill="none" stroke="var(--accent)" stroke-width="10"
+            stroke-dasharray="${circ}" stroke-dashoffset="${circ - (lunchPct/100)*circ/2}" stroke-linecap="round"
+            transform="rotate(-90 55 55)"/>
+          <circle cx="55" cy="55" r="${r-14}" fill="none" stroke="var(--glass-border)" stroke-width="10"/>
+          <circle cx="55" cy="55" r="${r-14}" fill="none" stroke="var(--indigo)" stroke-width="10"
+            stroke-dasharray="${2*Math.PI*(r-14)}" stroke-dashoffset="${2*Math.PI*(r-14) - (dinnerPct/100)*2*Math.PI*(r-14)/2}" stroke-linecap="round"
+            transform="rotate(-90 55 55)"/>
+          <text x="55" y="59" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="700" fill="var(--text)">${lunchCount+dinnerCount}</text>
+        </svg>
+        <div class="thali-legend">
+          <div><span class="dot" style="background:var(--accent);"></span> Lunch served: <b class="mono">${lunchCount}</b> / ${activeMembers.length}</div>
+          <div><span class="dot" style="background:var(--indigo);"></span> Dinner served: <b class="mono">${dinnerCount}</b> / ${activeMembers.length}</div>
+          <button class="btn btn-sm btn-accent" style="margin-top:6px;" data-nav="attendance">Mark Attendance</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head"><h3>Last 7 Days Collection</h3></div>
+      <div class="bar-chart">
+        ${days.map(d=>`<div class="bar-col"><div class="bar" style="height:${Math.max(6,(d.amt/maxAmt)*90)}px;" title="${fmtMoney(d.amt)}"></div><div class="bar-label">${d.label}</div></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head">
+      <h3>Quick Actions</h3>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-accent" data-nav="walkins">${ICONS.walkin} Add Walk-in</button>
+      <button class="btn btn-accent" data-nav="attendance">${ICONS.attendance} Mark Attendance</button>
+      <button class="btn" data-nav="payments">${ICONS.qr} QR / Cash Payment</button>
+      <button class="btn" data-quick="addPayment">${ICONS.payments} Record Payment</button>
+      <button class="btn" data-quick="addExpense">${ICONS.expenses} Add Expense</button>
+      <button class="btn" data-quick="addMember">${ICONS.plus} Add Member</button>
+    </div>
+  </div>
+
+  ${expiringSoon.length>0 ? `
+  <div class="card" style="margin-top:14px; border-color:rgba(232,163,61,0.35);">
+    <div class="section-head"><h3>${ICONS.bell} Plans Ending Soon</h3></div>
+    ${expiringSoon.map(x=>{
+      const initials = x.m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      const reason = x.cycle.daysUntilEnd<=0 ? 'Plan khatam ho chuka' : x.cycle.daysUntilEnd+' din baaki';
+      return `<div class="list-row">
+        <div class="avatar" style="background:var(--accent-soft); color:var(--accent);">${initials}</div>
+        <div class="list-main" data-open="${x.m.id}" style="cursor:pointer;"><div class="list-name">${x.m.name}</div><div class="list-sub">${reason} · Ends ${fmtDate(x.cycle.cycleEnd)}${x.cycle.dabbaAllocated?' · '+x.cycle.dabbaRemaining+' dabba left':''}</div></div>
+        <div class="list-actions"><button class="btn btn-sm" data-nav="reminders" data-preselect-member="${x.m.id}">${ICONS.bell} Remind</button></div>
+      </div>`;
+    }).join('')}
+  </div>` : ''}
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head"><h3>Recent Activity</h3></div>
+    ${recent.length===0 ? `<div class="empty">${ICONS.bell}<div>Koi activity nahi hai abhi</div></div>` :
+      recent.map(r=>{
+        const m = state.members.find(mm=>mm.id===r.memberId);
+        if(r.kind==='payment'){
+          return `<div class="list-row"><div class="avatar" style="background:var(--mint-soft); color:var(--mint);">₹</div><div class="list-main"><div class="list-name">${m?m.name:'Unknown'} — Payment received</div><div class="list-sub">${fmtDate(r.date)}</div></div><div class="list-actions"><span class="mono" style="color:var(--mint); font-weight:700;">+${fmtMoney(r.amount)}</span></div></div>`;
+        } else if(r.kind==='walkin'){
+          return `<div class="list-row"><div class="avatar" style="background:var(--indigo-soft); color:var(--indigo);">₹</div><div class="list-main"><div class="list-name">${r.name} — Walk-in</div><div class="list-sub">${fmtDate(r.date)}</div></div><div class="list-actions"><span class="mono" style="color:var(--mint); font-weight:700;">+${fmtMoney(r.amount)}</span></div></div>`;
+        } else {
+          return `<div class="list-row"><div class="avatar" style="background:var(--terracotta-soft); color:var(--terracotta);">₹</div><div class="list-main"><div class="list-name">Expense — ${r.category||'General'}</div><div class="list-sub">${fmtDate(r.date)}${r.note?' · '+r.note:''}</div></div><div class="list-actions"><span class="mono" style="color:var(--terracotta); font-weight:700;">-${fmtMoney(r.amount)}</span></div></div>`;
+        }
+      }).join('')}
+  </div>`;
+}
+
+/* ============ WALK-INS ============ */
+function viewWalkins(){
+  const walkins = (state.walkins||[]).slice().sort((a,b)=> b.date.localeCompare(a.date) || (b.id||'').localeCompare(a.id||''));
+  const today = todayStr();
+  const todayTotal = walkins.filter(w=>w.date===today).reduce((s,w)=>s+Number(w.amount),0);
+  const todayCount = walkins.filter(w=>w.date===today).length;
+  const monthTotal = walkins.filter(w=>w.date.startsWith(today.slice(0,7))).reduce((s,w)=>s+Number(w.amount),0);
+
+  return `
+  <div class="page-title">Walk-ins</div>
+  <div class="page-sub">Ek-din wale casual customers — inhe member banane ki zaroorat nahi. Bas naam, paisa aur date daalo.</div>
+
+  <div class="grid g3" style="margin-bottom:16px;">
+    <div class="card stat-card"><div class="stat-label">Today's Walk-ins</div><div class="stat-value">${todayCount}</div></div>
+    <div class="card stat-card"><div class="stat-label">Today's Collection</div><div class="stat-value" style="color:var(--mint);">${fmtMoney(todayTotal)}</div></div>
+    <div class="card stat-card"><div class="stat-label">This Month</div><div class="stat-value">${fmtMoney(monthTotal)}</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-head"><h3>Add Walk-in Entry</h3></div>
+    <div class="row2">
+      <div class="field"><label>Name*</label><input id="wi-name" placeholder="Customer ka naam"></div>
+      <div class="field"><label>Amount (₹)*</label><input type="number" id="wi-amount" placeholder="e.g. 80"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Phone (optional)</label><input id="wi-phone" placeholder="Optional"></div>
+      <div class="field"><label>Date*</label><input type="date" id="wi-date" value="${today}"></div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input id="wi-note" placeholder="e.g. Lunch only"></div>
+    <button class="btn btn-accent" id="wi-save" style="width:100%;">${ICONS.plus} Add Entry</button>
+  </div>
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Recent Walk-ins</h3></div>
+  <div class="card">
+    ${walkins.length===0?`<div class="empty">${ICONS.walkin}<div>Koi walk-in entry nahi hai abhi</div></div>`:
+      walkins.slice(0,100).map(w=>{
+        const initials = w.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <div class="avatar" style="background:var(--indigo-soft); color:var(--indigo);">${initials}</div>
+          <div class="list-main"><div class="list-name">${w.name}</div><div class="list-sub">${fmtDate(w.date)}${w.phone?' · '+w.phone:''}${w.note?' · '+w.note:''}</div></div>
+          <div class="list-actions">
+            <span class="mono" style="font-weight:700; color:var(--mint);">${fmtMoney(w.amount)}</span>
+            <button class="icon-btn" data-del-walkin="${w.id}">${ICONS.trash}</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+/* ============ MEMBERS ============ */
+function viewMembers(){
+  let list = state.members.slice();
+  if(memberSearch) list = list.filter(m=>m.name.toLowerCase().includes(memberSearch.toLowerCase()) || (m.phone||'').includes(memberSearch));
+  list.sort((a,b)=> (b.favorite - a.favorite) || a.name.localeCompare(b.name));
+
+  return `
+  <div class="page-title">Members</div>
+  <div class="page-sub">${state.members.length} total · ${state.members.filter(m=>m.category==='dine-in').length} dine-in · ${state.members.filter(m=>m.category==='dabba').length} dabba delivery</div>
+
+  <div class="section-head">
+    <div class="search-bar" style="flex:1; margin-bottom:0; max-width:340px;">
+      ${ICONS.search}<input id="member-search" placeholder="Search by name or phone..." value="${memberSearch}">
+    </div>
+    <button class="btn" id="import-members-btn">${ICONS.upload} Import Members</button>
+    <button class="btn btn-accent" data-quick="addMember">${ICONS.plus} Add Member</button>
+  </div>
+
+  <div class="card">
+    ${list.length===0 ? `<div class="empty">${ICONS.members}<div>Koi member nahi mila. Naya member add karo.</div></div>` :
+      list.map(m=>{
+        const pending = memberPending(m);
+        const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <button data-star="${m.id}" class="icon-btn" style="border:none; background:none; color:${m.favorite?'var(--accent)':'var(--text-dim)'}; width:28px; height:28px; flex-shrink:0;">${m.favorite?ICONS.star:ICONS.starOutline}</button>
+          <div class="avatar">${initials}</div>
+          <div class="list-main" data-open="${m.id}" style="cursor:pointer;">
+            <div class="list-name">${m.name} <span class="badge ${m.category==='dabba'?'badge-dabba':'badge-dine'}">${m.category==='dabba'?'Dabba':'Dine-in'}</span> ${billingBadge(m)}</div>
+            <div class="list-sub">${m.phone||'No phone'} · Joined ${fmtDate(m.joinDate)}</div>
+          </div>
+          <div class="list-actions">
+            <span class="mono" style="font-weight:700; font-size:12.5px; color:${pending>0?'var(--terracotta)':'var(--mint)'}">${pending>0?fmtMoney(pending)+' due':'Clear'}</span>
+            <button class="icon-btn" data-edit-member="${m.id}">${ICONS.edit}</button>
+            <button class="icon-btn" data-del-member="${m.id}">${ICONS.trash}</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function viewMemberDetail(){
+  const m = state.members.find(x=>x.id===currentMemberId);
+  if(!m){ currentView='members'; return viewMembers(); }
+  const charges = memberCharges(m), paid = memberPaid(m), pending = memberPending(m);
+  const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const cycle = getCurrentCycleStats(m);
+
+  const attDates = Object.keys(state.attendance).filter(d=>state.attendance[d][m.id] && (state.attendance[d][m.id].lunch||state.attendance[d][m.id].dinner)).sort().reverse().slice(0,15);
+  const pays = state.payments.filter(p=>p.memberId===m.id).sort((a,b)=>b.date.localeCompare(a.date));
+
+  return `
+  <button class="btn btn-sm btn-ghost" data-nav="members" style="margin-bottom:14px;">${ICONS.chevL} Back to Members</button>
+  <div class="member-detail-header">
+    <div class="avatar big-avatar">${initials}</div>
+    <div>
+      <div class="page-title" style="margin-bottom:2px;">${m.name}</div>
+      <div class="page-sub" style="margin-bottom:0;">
+        <span class="badge ${m.category==='dabba'?'badge-dabba':'badge-dine'}">${m.category==='dabba'?'Dabba Delivery':'Dine-in'}</span>
+        ${billingBadge(m)}
+        ${m.phone?' · '+m.phone:''} · Joined ${fmtDate(m.joinDate)}
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" data-edit-member="${m.id}">${ICONS.edit} Edit</button>
+  </div>
+
+  ${cycle && cycle.daysUntilEnd<=5 ? `<div class="card" style="border-color:rgba(232,163,61,0.4); margin-bottom:14px; display:flex; align-items:center; gap:10px;"><span style="color:var(--accent);">${ICONS.bell}</span> <div>Plan ${cycle.daysUntilEnd<=0?'khatam ho chuka hai':'khatam hone wala hai — sirf '+cycle.daysUntilEnd+' din baaki'} (${fmtDate(cycle.cycleEnd)})</div></div>` : ''}
+
+  <div class="grid g3" style="margin-bottom:14px;">
+    <div class="card stat-card"><div class="stat-label">Total Charges</div><div class="stat-value">${fmtMoney(charges)}</div></div>
+    <div class="card stat-card"><div class="stat-label">Total Paid</div><div class="stat-value" style="color:var(--mint);">${fmtMoney(paid)}</div></div>
+    <div class="card stat-card"><div class="stat-label">Pending</div><div class="stat-value" style="color:${pending>0?'var(--terracotta)':'var(--mint)'}">${fmtMoney(pending)}</div></div>
+  </div>
+
+  ${cycle ? `
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Current Plan Cycle (Cycle #${cycle.cycleNumber})</h3></div>
+  <div class="grid g4" style="margin-bottom:14px;">
+    <div class="card stat-card"><div class="stat-label">Present Days</div><div class="stat-value" style="color:var(--mint);">${cycle.presentDays}</div></div>
+    <div class="card stat-card"><div class="stat-label">Absent Days</div><div class="stat-value" style="color:var(--terracotta);">${cycle.absentDays}</div></div>
+    <div class="card stat-card"><div class="stat-label">Total Meals</div><div class="stat-value">${cycle.totalMeals}${cycle.dabbaAllocated?' / '+cycle.dabbaAllocated:''}</div></div>
+    <div class="card stat-card"><div class="stat-label">Plan End Date</div><div class="stat-value" style="font-size:15px;">${fmtDate(cycle.cycleEnd)}</div></div>
+  </div>` : ''}
+
+  <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+    <button class="btn btn-accent" data-quick="addPaymentFor" data-mid="${m.id}">${ICONS.payments} Record Payment</button>
+    <button class="btn" data-export-member-attendance="${m.id}">${ICONS.download} Export This Member's Attendance</button>
+  </div>
+
+  <div class="grid g2" style="align-items:start;">
+    <div class="card">
+      <div class="section-head"><h3>Attendance Timeline</h3></div>
+      ${attDates.length===0?`<div class="empty" style="padding:20px;">Koi attendance record nahi</div>`:
+        attDates.map(d=>{
+          const r = state.attendance[d][m.id];
+          return `<div class="timeline-item"><div class="timeline-date mono">${fmtDate(d)}</div><div>${r.lunch?'<span class="badge badge-dine">Lunch</span> ':''}${r.dinner?'<span class="badge badge-dabba">Dinner</span>':''}</div></div>`;
+        }).join('')}
+    </div>
+    <div class="card">
+      <div class="section-head"><h3>Payment History</h3></div>
+      ${pays.length===0?`<div class="empty" style="padding:20px;">Koi payment nahi mila</div>`:
+        pays.map(p=>`<div class="timeline-item"><div class="timeline-date mono">${fmtDate(p.date)}</div><div style="flex:1;">${p.mode||'Cash'}${p.note?' · '+p.note:''}</div><div class="mono" style="color:var(--mint); font-weight:700;">${fmtMoney(p.amount)}</div></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ============ ATTENDANCE ============ */
+function viewAttendance(){
+  const dayAtt = state.attendance[currentDate] || {};
+  const activeMembers = state.members.filter(m=>m.active!==false);
+
+  return `
+  <div class="page-title">Attendance</div>
+  <div class="page-sub">Lunch aur dinner mark karo har member ke liye</div>
+
+  <div class="section-head">
+    <div class="date-nav">
+      <button class="icon-btn" data-date-shift="-1">${ICONS.chevL}</button>
+      <input type="date" id="att-date" value="${currentDate}" class="mono" style="background:var(--bg-elev2); border:1px solid var(--glass-border); border-radius:9px; padding:7px 10px; color:var(--text);">
+      <button class="icon-btn" data-date-shift="1">${ICONS.chevR}</button>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-sm" data-mark-all="lunch">Mark All Lunch</button>
+      <button class="btn btn-sm" data-mark-all="dinner">Mark All Dinner</button>
+      <button class="btn btn-sm btn-danger" data-undo>${ICONS.undo} Undo</button>
+      <button class="btn btn-sm" id="import-attendance-btn">${ICONS.upload} Import Attendance</button>
+    </div>
+  </div>
+
+  <div class="card">
+    ${activeMembers.length===0?`<div class="empty">${ICONS.members}<div>Pehle members add karo</div></div>`:
+      activeMembers.map(m=>{
+        const r = dayAtt[m.id] || {lunch:false, dinner:false};
+        const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <div class="avatar">${initials}</div>
+          <div class="list-main"><div class="list-name">${m.name} <span class="badge ${m.category==='dabba'?'badge-dabba':'badge-dine'}">${m.category==='dabba'?'Dabba':'Dine-in'}</span></div></div>
+          <div class="list-actions meal-toggle">
+            <button class="meal-pill ${r.lunch?'on':''}" data-toggle-meal="${m.id}|lunch">${r.lunch?ICONS.check:''} Lunch</button>
+            <button class="meal-pill ${r.dinner?'on':''}" data-toggle-meal="${m.id}|dinner">${r.dinner?ICONS.check:''} Dinner</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+/* ============ TIFFIN / DABBA ============ */
+function viewTiffin(){
+  const dabbaMembers = state.members.filter(m=>m.category==='dabba' && m.active!==false);
+  const dayAtt = state.attendance[currentDate] || {};
+
+  return `
+  <div class="page-title">Tiffin / Dabba Delivery</div>
+  <div class="page-sub">${fmtDate(currentDate)} · Delivery checklist for dabba members</div>
+
+  <div class="section-head">
+    <div class="date-nav">
+      <button class="icon-btn" data-date-shift-tif="-1">${ICONS.chevL}</button>
+      <input type="date" id="tif-date" value="${currentDate}" class="mono" style="background:var(--bg-elev2); border:1px solid var(--glass-border); border-radius:9px; padding:7px 10px; color:var(--text);">
+      <button class="icon-btn" data-date-shift-tif="1">${ICONS.chevR}</button>
+    </div>
+  </div>
+
+  <div class="card">
+    ${dabbaMembers.length===0?`<div class="empty">${ICONS.tiffin}<div>Koi dabba-delivery member nahi hai. Member add karte waqt category "Dabba" select karo.</div></div>`:
+      dabbaMembers.map(m=>{
+        const r = dayAtt[m.id] || {lunch:false, dinner:false};
+        const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <div class="avatar" style="background:linear-gradient(135deg,var(--mint),#3a9c68);">${initials}</div>
+          <div class="list-main"><div class="list-name">${m.name}</div><div class="list-sub">${m.address||m.phone||'No address on file'}</div></div>
+          <div class="list-actions meal-toggle">
+            <button class="meal-pill ${r.lunch?'on':''}" data-toggle-meal="${m.id}|lunch">${r.lunch?ICONS.check:''} Lunch box</button>
+            <button class="meal-pill ${r.dinner?'on':''}" data-toggle-meal="${m.id}|dinner">${r.dinner?ICONS.check:''} Dinner box</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+/* ============ PAYMENTS ============ */
+function viewPayments(){
+  const pays = state.payments.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const pendingMembers = state.members.filter(m=>m.active!==false && memberPending(m)>0).sort((a,b)=>memberPending(b)-memberPending(a));
+  const s = state.settings;
+  const hasUpi = !!(s.upiId && s.upiId.trim());
+  const members = state.members.filter(m=>m.active!==false);
+  const presets = [
+    {key:'lunch', label:'Lunch', amount:s.lunchPrice},
+    {key:'dinner', label:'Dinner', amount:s.dinnerPrice},
+    {key:'1x', label:'1-Time Mess (Monthly)', amount:s.price1x},
+    {key:'2x', label:'2-Time Mess (Monthly)', amount:s.price2x},
+  ];
+
+  return `
+  <div class="page-title">Payments</div>
+  <div class="page-sub">Pending dues, QR/Cash collection aur poori history — sab ek jagah</div>
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Pending Dues</h3>
+    <button class="btn btn-accent btn-sm" data-quick="addPayment">${ICONS.plus} Record Payment</button>
+  </div>
+  <div class="card" style="margin-bottom:16px;">
+    ${pendingMembers.length===0?`<div class="empty" style="padding:20px;">Sabki payment clear hai 🎉</div>`:
+      pendingMembers.map(m=>{
+        const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <div class="avatar">${initials}</div>
+          <div class="list-main" data-open="${m.id}" style="cursor:pointer;"><div class="list-name">${m.name} ${billingBadge(m)}</div><div class="list-sub">${m.phone||''}</div></div>
+          <div class="list-actions">
+            <span class="badge badge-pending">${fmtMoney(memberPending(m))} due</span>
+            <button class="btn btn-sm" data-qr-member="${m.id}">${ICONS.qr} QR</button>
+            <button class="btn btn-sm btn-mint" data-cash-member="${m.id}">${ICONS.wallet} Cash</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Quick QR — Walk-in / Preset Amounts</h3></div>
+  ${!hasUpi ? `<div class="card" style="border-color:rgba(239,100,97,0.3); margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="color:var(--terracotta);">${ICONS.bell}</span>
+        <div>Pehle Settings me apna <b>UPI ID</b> daalo, tabhi QR generate hoga.</div>
+      </div>
+      <button class="btn btn-accent btn-sm" style="margin-top:12px;" data-nav="settings">Go to Settings</button>
+    </div>` : `
+  <div class="grid g4" style="margin-bottom:16px;">
+    ${presets.map(p=>`
+      <div class="card" style="text-align:center;">
+        <div class="stat-label" style="margin-bottom:8px;">${p.label}</div>
+        <div class="stat-value" style="margin-bottom:12px;">${fmtMoney(p.amount||0)}</div>
+        <button class="btn btn-accent btn-sm" data-qr-preset="${p.key}" style="width:100%;">${ICONS.qr} Generate QR</button>
+      </div>`).join('')}
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-head"><h3>Custom Amount</h3></div>
+    <div class="row2">
+      <div class="field"><label>Member (optional)</label>
+        <select id="qr-member"><option value="">— Walk-in / not linked —</option>${members.map(m=>`<option value="${m.id}">${m.name} (pending ${fmtMoney(memberPending(m))})</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Amount (₹)</label><input type="number" id="qr-amount" placeholder="e.g. 500"></div>
+    </div>
+    <button class="btn btn-accent" id="qr-custom-generate">${ICONS.qr} Generate QR</button>
+  </div>`}
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Payment History</h3></div>
+  <div class="card">
+    ${pays.length===0?`<div class="empty">${ICONS.payments}<div>Koi payment record nahi hai</div></div>`:
+      pays.map(p=>{
+        const m = state.members.find(mm=>mm.id===p.memberId);
+        return `<div class="list-row">
+          <div class="avatar" style="background:var(--mint-soft); color:var(--mint);">₹</div>
+          <div class="list-main"><div class="list-name">${m?m.name:'Unknown member'}</div><div class="list-sub">${fmtDate(p.date)} · ${p.mode||'Cash'}${p.note?' · '+p.note:''}</div></div>
+          <div class="list-actions">
+            <span class="mono" style="font-weight:700; color:var(--mint);">${fmtMoney(p.amount)}</span>
+            <button class="icon-btn" data-del-payment="${p.id}">${ICONS.trash}</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function openQRModal(amount, label, memberId){
+  const s = state.settings;
+  if(!amount || amount<=0){ toast('Valid amount daalo','danger'); return; }
+  const payeeName = encodeURIComponent(s.upiName || s.messName || 'Mess');
+  const note = encodeURIComponent(label || 'Mess Payment');
+  const upiUrl = `upi://pay?pa=${encodeURIComponent(s.upiId.trim())}&pn=${payeeName}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${note}`;
+  const m = memberId ? state.members.find(x=>x.id===memberId) : null;
+  const el = openModal(`
+    <h3>${label || 'Payment'} — ${fmtMoney(amount)}</h3>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div id="qr-canvas-wrap" style="background:#fff; padding:14px; border-radius:14px;"></div>
+      <div class="page-sub" style="text-align:center;">${m?('Linked to member: <b>'+m.name+'</b>'):'Kisi member se linked nahi (walk-in payment)'}</div>
+      <div class="page-sub" style="text-align:center; margin-top:-8px;">Scan hone ke baad apne UPI app me confirm karo ki paisa aaya, phir neeche "Mark as Received" karo.</div>
+      <div class="field" style="width:100%;"><label>UTR / Transaction ID (optional, apne UPI app ke notification se copy karo)</label><input id="qr-utr" placeholder="e.g. 402812345678"></div>
+      <div style="display:flex; gap:10px; width:100%;">
+        <button class="btn" id="qr-copy-link" style="flex:1;">Copy UPI Link</button>
+        <button class="btn btn-mint" id="qr-mark-paid" style="flex:1;">${ICONS.check} Mark as Received</button>
+      </div>
+      <button class="btn btn-ghost" id="qr-close">Close</button>
+    </div>`);
+  const canvasWrap = el.querySelector('#qr-canvas-wrap');
+  try{
+    new QRCode(canvasWrap, {text:upiUrl, width:200, height:200, colorDark:'#15121C', colorLight:'#ffffff'});
+  }catch(e){
+    canvasWrap.innerHTML = `<div style="color:#15121C; font-size:12px; max-width:200px;">QR library load nahi hui — internet connection check karo. UPI link neeche copy kar sakte ho.</div>`;
+  }
+  el.querySelector('#qr-close').onclick = ()=>el.remove();
+  el.querySelector('#qr-copy-link').onclick = ()=>{
+    navigator.clipboard && navigator.clipboard.writeText(upiUrl).then(()=>toast('UPI link copied','mint')).catch(()=>toast('Copy nahi ho paya','danger'));
+  };
+  el.querySelector('#qr-mark-paid').onclick = ()=>{
+    const utr = el.querySelector('#qr-utr').value.trim();
+    const noteWithUtr = [label, utr?('UTR: '+utr):null].filter(Boolean).join(' · ');
+    if(m){
+      state.payments.push({id:uid(), memberId:m.id, amount:Number(amount), date:todayStr(), mode:'UPI', note:noteWithUtr});
+      saveState(); toast('Payment recorded for '+m.name, 'mint');
+    } else {
+      toast('Amount note kar liya — member link nahi tha to payment record nahi hua', 'mint');
+    }
+    el.remove(); render();
+  };
+}
+
+/* ============ REMINDERS ============ */
+function buildReminderMessage(name, amount, dueDate){
+  const messName = state.settings.messName || 'Mess';
+  return `Dear ${name},\n\nYeh ${messName} ki taraf se ek payment reminder hai. Aapka ₹${amount} payment ${fmtDate(dueDate)} tak pending hai.\n\nKripya due date se pehle payment kar dein. Agar payment ho chuka hai to is message ko ignore karein.\n\nDhanyavaad! – Team ${messName}`;
+}
+function normalizePhoneForLink(phone){
+  let digits = (phone||'').replace(/\D/g,'');
+  if(digits.length===10) digits = '91'+digits;
+  else if(digits.length===11 && digits.startsWith('0')) digits = '91'+digits.slice(1);
+  return digits;
+}
+function logReminder(member, channel){
+  state.reminders.push({
+    id: uid(), memberId: member.id, name: member.name,
+    amount: currentReminderAmount, dueDate: currentReminderDueDate,
+    sentDate: todayStr(), channel
+  });
+  saveState();
+  toast('Reminder history me save ho gaya','mint');
+}
+function viewReminders(){
+  const members = state.members.filter(m=>m.active!==false);
+  const sel = currentReminderMemberId ? state.members.find(m=>m.id===currentReminderMemberId) : null;
+  const defaultAmount = sel ? Math.round(memberPending(sel)) : '';
+
+  return `
+  <div class="page-title">Payment Reminders</div>
+  <div class="page-sub">Customer, due amount aur due date bharo — message khud ban jayega</div>
+
+  <div class="grid g2" style="align-items:start;">
+    <div class="card">
+      <div class="section-head"><h3>Reminder Details</h3></div>
+      <div class="field"><label>Customer Name*</label>
+        <select id="rm-member">
+          <option value="">— Select customer —</option>
+          ${members.map(m=>`<option value="${m.id}" ${m.id===currentReminderMemberId?'selected':''}>${m.name}${m.phone?' ('+m.phone+')':' — no phone saved'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Mobile Number (from database)</label><input id="rm-phone" value="${sel?(sel.phone||''):''}" disabled style="opacity:.7;"></div>
+      <div class="row2">
+        <div class="field"><label>Due Amount (₹)*</label><input type="number" id="rm-amount" value="${defaultAmount}" placeholder="e.g. 1700"></div>
+        <div class="field"><label>Due Date*</label><input type="date" id="rm-date" value="${todayStr()}"></div>
+      </div>
+      <button class="btn btn-accent" id="rm-generate" style="width:100%;">${ICONS.bell} Generate Reminder</button>
+    </div>
+
+    <div class="card">
+      <div class="section-head"><h3>Message Preview</h3></div>
+      <textarea id="rm-message" rows="9" style="width:100%; background:var(--bg-elev2); border:1px solid var(--glass-border); border-radius:9px; padding:12px; color:var(--text); font-size:13px; line-height:1.5; resize:vertical;" placeholder="Customer select karke 'Generate Reminder' dabao...">${escapeHtml(currentReminderMessage)}</textarea>
+      <div class="page-sub" style="margin:8px 0;">Message edit bhi kar sakte ho bhejne se pehle.</div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-mint" id="rm-whatsapp" style="flex:1;">${ICONS.whatsapp} WhatsApp</button>
+        <button class="btn" id="rm-sms" style="flex:1;">${ICONS.sms} SMS</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head" style="margin-top:16px;"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Reminder History</h3></div>
+  <div class="card">
+    ${(!state.reminders || state.reminders.length===0) ? `<div class="empty">${ICONS.bell}<div>Koi reminder abhi tak bheja nahi gaya</div></div>` :
+      state.reminders.slice().sort((a,b)=>b.sentDate.localeCompare(a.sentDate)).map(r=>`
+        <div class="list-row">
+          <div class="avatar" style="background:${r.channel==='whatsapp'?'var(--mint-soft)':'var(--indigo-soft)'}; color:${r.channel==='whatsapp'?'var(--mint)':'var(--indigo)'};">${r.channel==='whatsapp'?ICONS.whatsapp:ICONS.sms}</div>
+          <div class="list-main"><div class="list-name">${r.name}</div><div class="list-sub">Due ${fmtMoney(r.amount)} by ${fmtDate(r.dueDate)} · Sent via ${r.channel==='whatsapp'?'WhatsApp':'SMS'} on ${fmtDate(r.sentDate)}</div></div>
+        </div>`).join('')}
+  </div>`;
+}
+
+/* ============ EXPENSES ============ */
+function viewExpenses(){
+  const exps = state.expenses.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const monthTotal = exps.filter(e=>e.date.startsWith(todayStr().slice(0,7))).reduce((s,e)=>s+Number(e.amount),0);
+  const staff = state.staff||[];
+
+  return `
+  <div class="page-title">Expenses</div>
+  <div class="page-sub">This month total: <b class="mono">${fmtMoney(monthTotal)}</b></div>
+
+  <div class="section-head">
+    <div></div>
+    <button class="btn btn-accent" data-quick="addExpense">${ICONS.plus} Add Expense</button>
+  </div>
+
+  <div class="card">
+    ${exps.length===0?`<div class="empty">${ICONS.expenses}<div>Koi expense record nahi hai</div></div>`:
+      exps.map(e=>`<div class="list-row">
+        <div class="avatar" style="background:var(--terracotta-soft); color:var(--terracotta);">₹</div>
+        <div class="list-main"><div class="list-name">${e.category||'General'}${e.staffName?' — '+e.staffName:''}</div><div class="list-sub">${fmtDate(e.date)}${e.note?' · '+e.note:''}</div></div>
+        <div class="list-actions">
+          <span class="mono" style="font-weight:700; color:var(--terracotta);">${fmtMoney(e.amount)}</span>
+          <button class="icon-btn" data-del-expense="${e.id}">${ICONS.trash}</button>
+        </div>
+      </div>`).join('')}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="section-head"><h3>Staff</h3>
+      <button class="btn btn-sm" data-quick="addStaff">${ICONS.plus} Add Staff</button>
+    </div>
+    ${staff.length===0?`<div class="page-sub" style="margin-bottom:0;">Koi staff add nahi kiya. Staff add karo taaki unke naam se salary/expense track kar sako.</div>`:
+      staff.map(s=>{
+        const total = state.expenses.filter(e=>e.staffId===s.id).reduce((sum,e)=>sum+Number(e.amount),0);
+        return `<div class="list-row">
+          <div class="avatar" style="background:var(--indigo-soft); color:var(--indigo);">${s.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+          <div class="list-main"><div class="list-name">${s.name}</div><div class="list-sub">${s.role||'Staff'} · Total paid: ${fmtMoney(total)}</div></div>
+          <div class="list-actions">
+            <button class="icon-btn" data-del-staff="${s.id}">${ICONS.trash}</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+/* ============ REPORTS ============ */
+function viewReports(){
+  const totalCollection = state.payments.reduce((s,p)=>s+Number(p.amount),0) + (state.walkins||[]).reduce((s,w)=>s+Number(w.amount),0);
+  const totalExpenses = state.expenses.reduce((s,e)=>s+Number(e.amount),0);
+  const dineCount = state.members.filter(m=>m.category!=='dabba').length;
+  const dabbaCount = state.members.filter(m=>m.category==='dabba').length;
+
+  return `
+  <div class="page-title">Reports</div>
+  <div class="page-sub">Data export aur summary</div>
+
+  <div class="grid g3" style="margin-bottom:16px;">
+    <div class="card stat-card"><div class="stat-label">All-time Collection</div><div class="stat-value" style="color:var(--mint);">${fmtMoney(totalCollection)}</div></div>
+    <div class="card stat-card"><div class="stat-label">All-time Expenses</div><div class="stat-value" style="color:var(--terracotta);">${fmtMoney(totalExpenses)}</div></div>
+    <div class="card stat-card"><div class="stat-label">Net Profit/Loss</div><div class="stat-value">${fmtMoney(totalCollection-totalExpenses)}</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-head"><h3>Member Mix</h3></div>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:6px;"><span class="mix-icon">${ICONS.members}</span> Dine-in: <b class="mono">${dineCount}</b></div>
+      <div style="display:flex; align-items:center; gap:6px;"><span class="mix-icon">${ICONS.tiffin}</span> Dabba: <b class="mono">${dabbaCount}</b></div>
+      <div style="display:flex; align-items:center; gap:6px;"><span class="mix-icon">${ICONS.walkin}</span> Walk-ins logged: <b class="mono">${(state.walkins||[]).length}</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-head"><h3>Export Data</h3></div>
+    <div class="page-sub" style="margin-bottom:14px;">CSV files Excel me khul jaayenge. Full JSON backup se pura data restore ho sakta hai.</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn" data-export="members">${ICONS.download} Members CSV</button>
+      <button class="btn" data-export="attendance">${ICONS.download} Attendance CSV</button>
+      <button class="btn" data-export="payments">${ICONS.download} Payments CSV</button>
+      <button class="btn" data-export="expenses">${ICONS.download} Expenses CSV</button>
+      <button class="btn" data-export="walkins">${ICONS.download} Walk-ins CSV</button>
+      <button class="btn btn-accent" data-export="backup">${ICONS.download} Full Backup (JSON)</button>
+    </div>
+  </div>`;
+}
+
+/* ============ SETTINGS ============ */
+/* ============ MONTH HISTORY ============ */
+function memberOverdueMonths(m){
+  const info = getPlanInfo(m.billingPlan || 'permeal');
+  if(!info || !info.rate) return 0;
+  const pending = memberPending(m);
+  return Math.floor(pending / info.rate);
+}
+function viewMonthHistory(){
+  const activeMembers = state.members.filter(m=>m.active!==false);
+  const overdueMembers = activeMembers.filter(m=>memberOverdueMonths(m) >= 1).sort((a,b)=>memberOverdueMonths(b)-memberOverdueMonths(a));
+
+  const monthSet = new Set();
+  state.payments.forEach(p=>monthSet.add(p.date.slice(0,7)));
+  state.expenses.forEach(e=>monthSet.add(e.date.slice(0,7)));
+  (state.walkins||[]).forEach(w=>monthSet.add(w.date.slice(0,7)));
+  Object.keys(state.attendance).forEach(d=>monthSet.add(d.slice(0,7)));
+  state.members.forEach(m=>monthSet.add((m.joinDate||todayStr()).slice(0,7)));
+  monthSet.add(todayStr().slice(0,7));
+  const months = [...monthSet].sort().reverse();
+
+  return `
+  <button class="btn btn-sm btn-ghost" data-nav="settings" style="margin-bottom:14px;">${ICONS.chevL} Back to Settings</button>
+  <div class="page-title">Month History</div>
+  <div class="page-sub">Purane months ka data aur overdue members</div>
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Overdue Members (Past Months Pending)</h3></div>
+  <div class="card" style="margin-bottom:20px;">
+    ${overdueMembers.length===0?`<div class="empty" style="padding:20px;">Koi member past-month se overdue nahi hai 🎉</div>`:
+      overdueMembers.map(m=>{
+        const months = memberOverdueMonths(m);
+        const initials = m.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return `<div class="list-row">
+          <div class="avatar" style="background:var(--terracotta-soft); color:var(--terracotta);">${initials}</div>
+          <div class="list-main" data-open="${m.id}" style="cursor:pointer;"><div class="list-name">${m.name} ${billingBadge(m)}</div><div class="list-sub">${m.phone||''}</div></div>
+          <div class="list-actions">
+            <span class="badge badge-pending">${months} month${months>1?'s':''} overdue</span>
+            <span class="mono" style="font-weight:700; color:var(--terracotta);">${fmtMoney(memberPending(m))}</span>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>
+
+  <div class="section-head"><h3 style="font-family:'Bricolage Grotesque'; font-size:15px;">Month-by-Month Summary</h3></div>
+  <div class="card">
+    ${months.map(mo=>{
+      const collection = state.payments.filter(p=>p.date.startsWith(mo)).reduce((s,p)=>s+Number(p.amount),0)
+        + (state.walkins||[]).filter(w=>w.date.startsWith(mo)).reduce((s,w)=>s+Number(w.amount),0);
+      const expenses = state.expenses.filter(e=>e.date.startsWith(mo)).reduce((s,e)=>s+Number(e.amount),0);
+      const net = collection - expenses;
+      const label = new Date(mo+'-01T00:00:00').toLocaleDateString('en-IN',{month:'long', year:'numeric'});
+      return `<div class="list-row">
+        <div class="list-main"><div class="list-name">${label}</div></div>
+        <div class="list-actions">
+          <span class="page-sub" style="margin:0; color:var(--mint);">Collected ${fmtMoney(collection)}</span>
+          <span class="page-sub" style="margin:0; color:var(--terracotta);">Expenses ${fmtMoney(expenses)}</span>
+          <span class="mono" style="font-weight:700;">Net ${fmtMoney(net)}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function viewSettings(){
+  const s = state.settings;
+  return `
+  <div class="page-title">Settings</div>
+  <div class="page-sub">Mess ki details aur pricing</div>
+
+  <div class="grid g2" style="align-items:start;">
+    <div class="card">
+      <div class="section-head"><h3>Business Info</h3></div>
+      <div class="field"><label>Mess / Business Name</label><input id="set-messName" value="${s.messName||''}"></div>
+      <div class="field"><label>Owner Name</label><input id="set-ownerName" value="${s.ownerName||''}"></div>
+      <div class="field"><label>Contact Number (WhatsApp)</label><input id="set-contact" value="${s.contactNumber||''}" placeholder="e.g. 9876543210"></div>
+      <div class="field"><label>Google Maps Link (location)</label><input id="set-maps" value="${s.googleMapsLink||''}" placeholder="https://maps.app.goo.gl/..."></div>
+      <div class="field"><label>Logo</label><input type="file" id="set-logo" accept="image/*"></div>
+      ${s.logo?`<button class="btn btn-sm btn-danger" id="set-logo-remove" style="margin-bottom:10px;">Remove Logo</button>`:''}
+      <button class="btn btn-accent" id="save-business">Save</button>
+    </div>
+    <div class="card">
+      <div class="section-head"><h3>Pricing</h3></div>
+      <div class="row2">
+        <div class="field"><label>Lunch Price (₹)</label><input type="number" id="set-lunch" value="${s.lunchPrice}"></div>
+        <div class="field"><label>Dinner Price (₹)</label><input type="number" id="set-dinner" value="${s.dinnerPrice}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>1-Time Mess Monthly (₹)</label><input type="number" id="set-1x" value="${s.price1x}"></div>
+        <div class="field"><label>2-Time Mess Monthly (₹)</label><input type="number" id="set-2x" value="${s.price2x}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Tiffin/Dabba in 1-Time Plan</label><input type="number" id="set-dabba1x" value="${s.dabba1x}"></div>
+        <div class="field"><label>Tiffin/Dabba in 2-Time Plan</label><input type="number" id="set-dabba2x" value="${s.dabba2x}"></div>
+      </div>
+      <div class="page-sub" style="margin-bottom:10px;">Har plan cycle 30 effective din ka hota hai — jis din member absent rahega (attendance nahi lagegi), uska recovery din cycle me add ho jayega, isliye cycle 30 se lamba bhi ho sakta hai. Dabba count batata hai plan me total kitne tiffin included hain.</div>
+      <button class="btn btn-accent" id="save-pricing">Save</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head"><h3>Billing Plans</h3>
+      <button class="btn btn-sm btn-accent" id="add-plan-btn">${ICONS.plus} Add Custom Plan</button>
+    </div>
+    <div class="page-sub" style="margin-bottom:10px;">1-Time aur 2-Time monthly rates upar "Pricing" me set karte ho. Yahan apne custom plans bana sakte ho (jaise "Weekly Pack" ya "Trial Pack") apna naam aur price ke saath — ye bhi member add karte waqt dropdown me milenge.</div>
+    ${(state.customPlans||[]).length===0?`<div class="page-sub" style="margin-bottom:0;">Koi custom plan nahi hai abhi.</div>`:
+      state.customPlans.map(p=>`<div class="list-row">
+        <div class="avatar" style="background:var(--indigo-soft); color:var(--indigo);">₹</div>
+        <div class="list-main"><div class="list-name">${p.name}</div><div class="list-sub">${fmtMoney(p.price)}/cycle · ${p.dabbaCount||0} dabba</div></div>
+        <div class="list-actions"><button class="icon-btn" data-del-plan="${p.id}">${ICONS.trash}</button></div>
+      </div>`).join('')}
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head"><h3>Month History</h3></div>
+    <div class="page-sub" style="margin-bottom:10px;">Purane months ka collection/expense record dekho, aur jin members ne pichle month(s) ka payment clear nahi kiya unhe dekho.</div>
+    <button class="btn btn-accent" data-nav="monthHistory">${ICONS.history} View Month History</button>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head"><h3>QR Payment (UPI)</h3></div>
+    <div class="row2">
+      <div class="field"><label>UPI ID (VPA)</label><input id="set-upiId" value="${s.upiId||''}" placeholder="yourname@upi"></div>
+      <div class="field"><label>Payee Name (shown to payer)</label><input id="set-upiName" value="${s.upiName||''}" placeholder="${s.messName||'Mess'}"></div>
+    </div>
+    <div class="page-sub" style="margin-bottom:10px;">Ye QR Pay tab me lunch/dinner/monthly amounts ke QR codes banane ke kaam aayega.</div>
+    <button class="btn btn-accent" id="save-upi">Save</button>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="section-head"><h3>Member Portal</h3></div>
+    <div class="page-sub" style="margin-bottom:0;">Ek separate customer-facing page (<b>member-portal.html</b>) hai jaha members apna naam search karke apni attendance, due, aur payment history dekh sakte hain, aur WhatsApp se Book Meal/Feedback/Help bhej sakte hain. Ye isi cloud data se live connected hai. Deploy karne ke liye is file ko apne GitHub repo me <b>index.html</b> ke saath hi add karo — phir woh <b>yoursite.netlify.app/member-portal.html</b> pe accessible hoga.<br><br><b>Zaroori:</b> Firestore Rules me public read allow karni hogi (write phir bhi sirf tumhare login se hi hogi) — neeche diye gaye rules use karo.</div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px; align-items:start;">
+    <div class="card">
+      <div class="section-head"><h3>Appearance</h3></div>
+      <div class="page-sub" style="margin-bottom:10px;">Dark mode default hai. Top-right button se switch karo.</div>
+      <button class="btn" id="set-theme-btn">Toggle Theme</button>
+    </div>
+    <div class="card">
+      <div class="section-head"><h3>Backup & Data</h3></div>
+      <div class="page-sub" style="margin-bottom:10px;">Data ab real cloud database (Firebase) me save hota hai — kisi bhi device se same email-password se login karke access hoga. Agar internet na ho, tab tak ke liye is browser me bhi ek local copy rakhi jaati hai. Extra safety ke liye JSON backup bhi download karke rakho.</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" data-export="backup">${ICONS.download} Download Backup</button>
+        <button class="btn" id="import-btn">${ICONS.upload} Import Backup</button>
+        <input type="file" id="import-file" accept=".json" style="display:none;">
+      </div>
+      <button class="btn btn-danger" id="reset-data" style="margin-top:14px;">Reset All Data</button>
+    </div>
+  </div>`;
+}
+
+/* ============ MODALS ============ */
+function openModal(html){
+  const wrap = document.createElement('div');
+  wrap.className='overlay';
+  wrap.innerHTML = `<div class="modal">${html}</div>`;
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  document.body.appendChild(wrap);
+  return wrap;
+}
+function closeModals(){ document.querySelectorAll('.overlay').forEach(o=>o.remove()); }
+
+function normalizeHeaderKey(row, candidates){
+  const keys = Object.keys(row);
+  for(const k of keys){
+    const norm = k.toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(candidates.includes(norm)) return k;
+  }
+  return null;
+}
+function parseDateFlexible(v){
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if(typeof v==='number' && typeof XLSX!=='undefined' && XLSX.SSF){
+    try{ const d = XLSX.SSF.parse_date_code(v); if(d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }catch(e){}
+  }
+  const s = String(v||'').trim();
+  if(!s) return todayStr();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/); // assumes DD/MM/YYYY (India)
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return todayStr();
+}
+function parseImportRow(row){
+  const nameKey = normalizeHeaderKey(row, ['name','customername','membername']);
+  const phoneKey = normalizeHeaderKey(row, ['phone','phonenumber','mobile','mobilenumber','contact','contactnumber']);
+  const catKey = normalizeHeaderKey(row, ['category','type']);
+  const planKey = normalizeHeaderKey(row, ['billingplan','plan','billing']);
+  const joinKey = normalizeHeaderKey(row, ['joindate','date','startdate','joiningdate']);
+
+  const name = nameKey ? String(row[nameKey]||'').trim() : '';
+  if(!name) return null;
+  const phone = phoneKey ? String(row[phoneKey]||'').trim() : '';
+  const catRaw = (catKey ? String(row[catKey]||'') : '').toLowerCase();
+  const category = (catRaw.includes('dabba') || catRaw.includes('deliver')) ? 'dabba' : 'dine-in';
+  const planRaw = (planKey ? String(row[planKey]||'') : '').toLowerCase().replace(/[^a-z0-9]/g,'');
+  let billingPlan = '1x';
+  if(planRaw.includes('2')) billingPlan = '2x';
+  else if(planRaw.includes('1')) billingPlan = '1x';
+  else if(planRaw){
+    const cp = (state.customPlans||[]).find(p=>p.name.toLowerCase().replace(/[^a-z0-9]/g,'')===planRaw);
+    if(cp) billingPlan = 'plan:'+cp.id;
+  }
+  const joinDate = joinKey ? parseDateFlexible(row[joinKey]) : todayStr();
+  return {id:uid(), name, phone, category, billingPlan, address:'', notes:'', joinDate, active:true, favorite:false};
+}
+function downloadSampleTemplate(){
+  const rows = [
+    {Name:'Ramesh Kumar', Phone:'9876543210', Category:'Dine-in', 'Billing Plan':'1x', 'Join Date':'26/06/2026'},
+    {Name:'Suresh Yadav', Phone:'9123456780', Category:'Dabba', 'Billing Plan':'2x', 'Join Date':'01/07/2026'}
+  ];
+  const csv = toCSV(rows, ['Name','Phone','Category','Billing Plan','Join Date']);
+  downloadFile(csv, 'member-import-template.csv', 'text/csv');
+}
+function modalImportMembers(){
+  const el = openModal(`
+    <h3>Import Members</h3>
+    <div class="page-sub" style="margin-bottom:12px;">Excel (.xlsx) ya CSV file upload karo. Columns hone chahiye: <b>Name, Phone, Category, Billing Plan, Join Date</b>. Category me "Dine-in" ya "Dabba" likho, Billing Plan me "1x", "2x" ya apne custom plan ka naam.</div>
+    <button class="btn btn-sm" id="download-template-btn" style="margin-bottom:14px;">${ICONS.download} Download Sample Template</button>
+    <div class="field"><label>Select File</label><input type="file" id="import-file-input" accept=".csv,.xlsx,.xls"></div>
+    <div id="import-preview"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="im-cancel">Cancel</button>
+      <button class="btn btn-accent" id="im-confirm" style="display:none;">Import</button>
+    </div>`);
+  let parsedMembers = [];
+  el.querySelector('#download-template-btn').onclick = downloadSampleTemplate;
+  el.querySelector('#im-cancel').onclick = ()=>el.remove();
+  el.querySelector('#import-file-input').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+        parsedMembers = rows.map(parseImportRow).filter(Boolean);
+        const previewEl = el.querySelector('#import-preview');
+        if(parsedMembers.length===0){
+          previewEl.innerHTML = `<div class="page-sub" style="color:var(--terracotta);">Koi valid row nahi mili. Column names check karo.</div>`;
+          el.querySelector('#im-confirm').style.display='none';
+        } else {
+          previewEl.innerHTML = `<div class="page-sub" style="margin:12px 0 6px;"><b>${parsedMembers.length} members</b> milenge import karne ke liye. Preview:</div>
+            <div style="max-height:180px; overflow-y:auto; border:1px solid var(--glass-border); border-radius:9px; padding:8px;">
+              ${parsedMembers.slice(0,8).map(m=>`<div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--glass-border);">${m.name} · ${m.phone||'no phone'} · ${m.category} · ${m.billingPlan} · ${fmtDate(m.joinDate)}</div>`).join('')}
+              ${parsedMembers.length>8?`<div style="font-size:12px; color:var(--text-dim); padding-top:4px;">+${parsedMembers.length-8} more...</div>`:''}
+            </div>`;
+          el.querySelector('#im-confirm').style.display='inline-flex';
+        }
+      }catch(err){
+        el.querySelector('#import-preview').innerHTML = `<div class="page-sub" style="color:var(--terracotta);">File padh nahi paya. Sahi format check karo.</div>`;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  el.querySelector('#im-confirm').onclick = ()=>{
+    if(parsedMembers.length===0) return;
+    state.members.push(...parsedMembers);
+    saveState(); toast(parsedMembers.length+' members imported','mint'); el.remove(); render();
+  };
+}
+
+function downloadAttendanceTemplate(){
+  const rows = [
+    {Date:'26/06/2026', Member:'Ramesh Kumar', Lunch:'Yes', Dinner:'No'},
+    {Date:'26/06/2026', Member:'Suresh Yadav', Lunch:'Yes', Dinner:'Yes'}
+  ];
+  const csv = toCSV(rows, ['Date','Member','Lunch','Dinner']);
+  downloadFile(csv, 'attendance-import-template.csv', 'text/csv');
+}
+function parseYesNo(v){
+  const s = String(v||'').trim().toLowerCase();
+  return s==='yes' || s==='y' || s==='true' || s==='1';
+}
+function daysInMonthGrid(year, monthIdx){ return new Date(year, monthIdx+1, 0).getDate(); }
+function isGridFormat(rawRows){
+  if(!rawRows || rawRows.length < 2) return false;
+  const r0 = (rawRows[0]||[]).map(v=>String(v||'').trim().toLowerCase());
+  const r1 = (rawRows[1]||[]).map(v=>String(v||'').trim().toLowerCase());
+  return r0[0]==='no.' && r0[1] && r0[1].includes('member') && r1.includes('lunch') && r1.includes('dinner');
+}
+function parseAttendanceGrid(rawRows, year, monthIdx){
+  const totalDays = daysInMonthGrid(year, monthIdx);
+  const records = [];
+  for(let ri=2; ri<rawRows.length; ri++){
+    const row = rawRows[ri];
+    if(!row) continue;
+    const nameRaw = String(row[1]||'').trim();
+    if(!nameRaw) continue;
+    const member = state.members.find(m=>m.name.toLowerCase().trim()===nameRaw.toLowerCase());
+    for(let day=1; day<=totalDays; day++){
+      const lunchCol = 2 + (day-1)*2;
+      const dinnerCol = lunchCol + 1;
+      const lunchVal = String(row[lunchCol]!=null ? row[lunchCol] : '').trim();
+      const dinnerVal = String(row[dinnerCol]!=null ? row[dinnerCol] : '').trim();
+      if(!lunchVal && !dinnerVal) continue; // no mark for this day, skip
+      const date = `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      if(!member){ records.push({error:true, name:nameRaw, date}); continue; }
+      records.push({ memberId:member.id, memberName:member.name, date, lunch:!!lunchVal, dinner:!!dinnerVal });
+    }
+  }
+  return records;
+}
+function parseAttendanceRow(row){
+  const dateKey = normalizeHeaderKey(row, ['date']);
+  const memberKey = normalizeHeaderKey(row, ['member','membername','name']);
+  const phoneKey = normalizeHeaderKey(row, ['phone','phonenumber','mobile']);
+  const lunchKey = normalizeHeaderKey(row, ['lunch']);
+  const dinnerKey = normalizeHeaderKey(row, ['dinner']);
+  if(!dateKey || !memberKey) return null;
+
+  const date = parseDateFlexible(row[dateKey]);
+  const nameRaw = String(row[memberKey]||'').trim();
+  const phoneRaw = phoneKey ? String(row[phoneKey]||'').trim().replace(/\D/g,'') : '';
+  if(!nameRaw) return null;
+
+  let member = null;
+  if(phoneRaw) member = state.members.find(m=>(m.phone||'').replace(/\D/g,'').endsWith(phoneRaw) && phoneRaw.length>=8);
+  if(!member) member = state.members.find(m=>m.name.toLowerCase().trim()===nameRaw.toLowerCase());
+  if(!member) return {error:true, name:nameRaw, date};
+
+  return {
+    memberId: member.id, memberName: member.name, date,
+    lunch: lunchKey ? parseYesNo(row[lunchKey]) : false,
+    dinner: dinnerKey ? parseYesNo(row[dinnerKey]) : false
+  };
+}
+function modalImportAttendance(){
+  const now = new Date();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const el = openModal(`
+    <h3>Import Attendance</h3>
+    <div class="page-sub" style="margin-bottom:12px;">Do format supported hain:<br>
+    1) <b>Monthly Grid</b> — columns: No., Member Name, phir har din ke liye Lunch/Dinner (jaisa tumhara grid sheet hai). Kisi bhi cell me kuch bhi mark karo (jaise P, ✓, 1) matlab present, khaali chhodo matlab absent.<br>
+    2) <b>Simple List</b> — columns: Date, Member, Lunch, Dinner (Yes/No).<br>
+    Member ka naam bilkul waisa hi likhna jaisa Members list me hai.</div>
+    <button class="btn btn-sm" id="download-att-template-btn" style="margin-bottom:14px;">${ICONS.download} Download Sample Template (Simple List)</button>
+    <div class="field"><label>Select File</label><input type="file" id="import-att-file-input" accept=".csv,.xlsx,.xls"></div>
+    <div id="import-att-monthyear" style="display:none;" class="row2">
+      <div class="field"><label>Month</label><select id="ia-month">${monthNames.map((mn,i)=>`<option value="${i}" ${i===now.getMonth()?'selected':''}>${mn}</option>`).join('')}</select></div>
+      <div class="field"><label>Year</label><select id="ia-year">${[now.getFullYear()-1, now.getFullYear(), now.getFullYear()+1].map(y=>`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`).join('')}</select></div>
+    </div>
+    <div id="import-att-preview"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="ia-cancel">Cancel</button>
+      <button class="btn btn-accent" id="ia-confirm" style="display:none;">Import</button>
+    </div>`);
+  let parsedRows = [];
+  let rawGridRows = null;
+  el.querySelector('#download-att-template-btn').onclick = downloadAttendanceTemplate;
+  el.querySelector('#ia-cancel').onclick = ()=>el.remove();
+
+  function renderPreview(){
+    const valid = parsedRows.filter(r=>!r.error);
+    const invalid = parsedRows.filter(r=>r.error);
+    const previewEl = el.querySelector('#import-att-preview');
+    if(valid.length===0 && invalid.length===0){
+      previewEl.innerHTML = `<div class="page-sub" style="color:var(--terracotta);">Koi valid row nahi mili. Columns aur member names check karo.</div>`;
+      el.querySelector('#ia-confirm').style.display='none';
+      return;
+    }
+    previewEl.innerHTML = `<div class="page-sub" style="margin:12px 0 6px;"><b>${valid.length} attendance records</b> milenge import karne ke liye.${invalid.length?' <span style="color:var(--terracotta);">'+invalid.length+' rows me member nahi mila, skip honge.</span>':''}</div>
+      <div style="max-height:180px; overflow-y:auto; border:1px solid var(--glass-border); border-radius:9px; padding:8px;">
+        ${valid.slice(0,10).map(r=>`<div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--glass-border);">${fmtDate(r.date)} · ${r.memberName} · Lunch: ${r.lunch?'Yes':'No'} · Dinner: ${r.dinner?'Yes':'No'}</div>`).join('')}
+        ${valid.length>10?`<div style="font-size:12px; color:var(--text-dim); padding-top:4px;">+${valid.length-10} more...</div>`:''}
+        ${invalid.slice(0,5).map(r=>`<div style="font-size:12px; color:var(--terracotta); padding:4px 0;">Skipped: "${r.name}" (${fmtDate(r.date)}) — member nahi mila</div>`).join('')}
+      </div>`;
+    el.querySelector('#ia-confirm').style.display = valid.length>0 ? 'inline-flex' : 'none';
+  }
+
+  function runGridParse(){
+    const year = Number(el.querySelector('#ia-year').value);
+    const monthIdx = Number(el.querySelector('#ia-month').value);
+    parsedRows = parseAttendanceGrid(rawGridRows, year, monthIdx);
+    renderPreview();
+  }
+
+  el.querySelector('#import-att-file-input').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+        if(isGridFormat(raw)){
+          rawGridRows = raw;
+          el.querySelector('#import-att-monthyear').style.display = 'grid';
+          runGridParse();
+        } else {
+          el.querySelector('#import-att-monthyear').style.display = 'none';
+          const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+          parsedRows = rows.map(parseAttendanceRow).filter(Boolean);
+          renderPreview();
+        }
+      }catch(err){
+        el.querySelector('#import-att-preview').innerHTML = `<div class="page-sub" style="color:var(--terracotta);">File padh nahi paya. Sahi format check karo.</div>`;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  el.querySelector('#ia-month').onchange = ()=>{ if(rawGridRows) runGridParse(); };
+  el.querySelector('#ia-year').onchange = ()=>{ if(rawGridRows) runGridParse(); };
+  el.querySelector('#ia-confirm').onclick = ()=>{
+    const valid = parsedRows.filter(r=>!r.error);
+    if(valid.length===0) return;
+    valid.forEach(r=>{
+      if(!state.attendance[r.date]) state.attendance[r.date] = {};
+      state.attendance[r.date][r.memberId] = {lunch:r.lunch, dinner:r.dinner};
+    });
+    saveState(); toast(valid.length+' attendance records imported','mint'); el.remove(); render();
+  };
+}
+
+function modalAddMember(existing){
+  const isEdit = !!existing;
+  const m = existing || {name:'',phone:'',category:'dine-in',joinDate:todayStr(),address:'',notes:'',billingPlan:'1x'};
+  const s = state.settings;
+  const el = openModal(`
+    <h3>${isEdit?'Edit Member':'Add Member'}</h3>
+    <div class="page-sub" style="margin:-4px 0 12px;">Sirf monthly-pack wale regular members yahan add karo. Ek-din wale customers ke liye "Walk-ins" tab use karo.</div>
+    <div class="field"><label>Name*</label><input id="mf-name" value="${m.name}"></div>
+    <div class="row2">
+      <div class="field"><label>Phone</label><input id="mf-phone" value="${m.phone||''}"></div>
+      <div class="field"><label>Category</label>
+        <select id="mf-category">
+          <option value="dine-in" ${m.category==='dine-in'?'selected':''}>Dine-in (mess pe aate hain)</option>
+          <option value="dabba" ${m.category==='dabba'?'selected':''}>Dabba (delivery)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Billing Plan</label>
+      <select id="mf-billing">
+        <option value="1x" ${(m.billingPlan||'1x')==='1x'?'selected':''}>1-Time Mess Monthly (${fmtMoney(s.price1x)}/month)</option>
+        <option value="2x" ${m.billingPlan==='2x'?'selected':''}>2-Time Mess Monthly (${fmtMoney(s.price2x)}/month)</option>
+        ${(state.customPlans||[]).map(p=>`<option value="plan:${p.id}" ${m.billingPlan==='plan:'+p.id?'selected':''}>${p.name} (${fmtMoney(p.price)}/month)</option>`).join('')}
+      </select>
+    </div>
+    <div class="page-sub" style="margin:-6px 0 12px;">Naya custom plan chahiye? Settings → Billing Plans se add karo.</div>
+    <div class="field" id="mf-address-field" style="display:${m.category==='dabba'?'flex':'none'};"><label>Address (delivery ke liye)</label><input id="mf-address" value="${m.address||''}"></div>
+    <div class="field"><label>Join Date</label><input type="date" id="mf-join" value="${m.joinDate}"></div>
+    <div class="field"><label>Notes</label><textarea id="mf-notes" rows="2">${m.notes||''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="mf-cancel">Cancel</button>
+      <button class="btn btn-accent" id="mf-save">${isEdit?'Save Changes':'Add Member'}</button>
+    </div>`);
+  const categorySelect = el.querySelector('#mf-category');
+  const addressField = el.querySelector('#mf-address-field');
+  categorySelect.onchange = ()=>{ addressField.style.display = categorySelect.value==='dabba' ? 'flex' : 'none'; };
+  el.querySelector('#mf-cancel').onclick = ()=>el.remove();
+  el.querySelector('#mf-save').onclick = ()=>{
+    const name = el.querySelector('#mf-name').value.trim();
+    if(!name){ toast('Name daalna zaroori hai','danger'); return; }
+    const category = el.querySelector('#mf-category').value;
+    const data = {
+      name, phone: el.querySelector('#mf-phone').value.trim(),
+      category,
+      billingPlan: el.querySelector('#mf-billing').value,
+      address: category==='dabba' ? el.querySelector('#mf-address').value.trim() : '',
+      joinDate: el.querySelector('#mf-join').value || todayStr(),
+      notes: el.querySelector('#mf-notes').value.trim(),
+      active:true
+    };
+    if(isEdit){ Object.assign(existing, data); toast('Member updated'); }
+    else{ state.members.push({id:uid(), favorite:false, ...data}); toast('Member added','mint'); }
+    saveState(); el.remove(); render();
+  };
+}
+
+function modalAddPayment(memberId){
+  const members = state.members.filter(m=>m.active!==false);
+  const el = openModal(`
+    <h3>Record Payment</h3>
+    <div class="field"><label>Member*</label>
+      <select id="pf-member">${members.map(m=>`<option value="${m.id}" ${m.id===memberId?'selected':''}>${m.name} (pending ${fmtMoney(memberPending(m))})</option>`).join('')}</select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Amount (₹)*</label><input type="number" id="pf-amount" placeholder="0"></div>
+      <div class="field"><label>Date</label><input type="date" id="pf-date" value="${todayStr()}"></div>
+    </div>
+    <div class="field"><label>Mode</label>
+      <select id="pf-mode"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Other</option></select>
+    </div>
+    <div class="field"><label>Note</label><input id="pf-note" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="pf-cancel">Cancel</button>
+      <button class="btn btn-accent" id="pf-save">Save Payment</button>
+    </div>`);
+  el.querySelector('#pf-member') && el.querySelector('#pf-member').addEventListener('change', function(){});
+  const fillFull = ()=>{
+    const mid = el.querySelector('#pf-member').value;
+    const m = state.members.find(x=>x.id===mid);
+    if(m) el.querySelector('#pf-amount').value = memberPending(m) || '';
+  };
+  el.querySelector('#pf-cancel').onclick = ()=>el.remove();
+  el.querySelector('#pf-save').onclick = ()=>{
+    const mid = el.querySelector('#pf-member').value;
+    const amount = Number(el.querySelector('#pf-amount').value);
+    if(!mid || !amount || amount<=0){ toast('Member aur valid amount daalo','danger'); return; }
+    state.payments.push({id:uid(), memberId:mid, amount, date:el.querySelector('#pf-date').value||todayStr(), mode:el.querySelector('#pf-mode').value, note:el.querySelector('#pf-note').value.trim()});
+    saveState(); toast('Payment recorded','mint'); el.remove(); render();
+  };
+  if(memberId) fillFull();
+}
+
+function modalAddExpense(){
+  const staff = state.staff||[];
+  const el = openModal(`
+    <h3>Add Expense</h3>
+    <div class="field"><label>Category*</label>
+      <select id="ef-cat"><option>Groceries</option><option>Gas/Fuel</option><option>Staff Salary</option><option>Rent</option><option>Utilities</option><option>Maintenance</option><option>Other</option></select>
+    </div>
+    <div class="field"><label>Staff Member (optional)</label>
+      <select id="ef-staff">
+        <option value="">— Not linked to staff —</option>
+        ${staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Amount (₹)*</label><input type="number" id="ef-amount" placeholder="0"></div>
+      <div class="field"><label>Date</label><input type="date" id="ef-date" value="${todayStr()}"></div>
+    </div>
+    <div class="field"><label>Note</label><input id="ef-note" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="ef-cancel">Cancel</button>
+      <button class="btn btn-accent" id="ef-save">Save Expense</button>
+    </div>`);
+  el.querySelector('#ef-cancel').onclick = ()=>el.remove();
+  el.querySelector('#ef-save').onclick = ()=>{
+    const amount = Number(el.querySelector('#ef-amount').value);
+    if(!amount || amount<=0){ toast('Valid amount daalo','danger'); return; }
+    const staffId = el.querySelector('#ef-staff').value;
+    const staffMember = staffId ? staff.find(s=>s.id===staffId) : null;
+    state.expenses.push({id:uid(), category:el.querySelector('#ef-cat').value, amount, date:el.querySelector('#ef-date').value||todayStr(), note:el.querySelector('#ef-note').value.trim(), staffId:staffId||null, staffName:staffMember?staffMember.name:null});
+    saveState(); toast('Expense added','mint'); el.remove(); render();
+  };
+}
+
+function modalAddStaff(){
+  const el = openModal(`
+    <h3>Add Staff Member</h3>
+    <div class="field"><label>Name*</label><input id="sf-name"></div>
+    <div class="field"><label>Role (optional)</label><input id="sf-role" placeholder="e.g. Cook, Delivery Boy"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="sf-cancel">Cancel</button>
+      <button class="btn btn-accent" id="sf-save">Add Staff</button>
+    </div>`);
+  el.querySelector('#sf-cancel').onclick = ()=>el.remove();
+  el.querySelector('#sf-save').onclick = ()=>{
+    const name = el.querySelector('#sf-name').value.trim();
+    if(!name){ toast('Naam daalo','danger'); return; }
+    state.staff.push({id:uid(), name, role:el.querySelector('#sf-role').value.trim()});
+    saveState(); toast('Staff added','mint'); el.remove(); render();
+  };
+}
+
+function modalAddPlan(){
+  const el = openModal(`
+    <h3>Add Custom Billing Plan</h3>
+    <div class="field"><label>Plan Name*</label><input id="pl-name" placeholder="e.g. Weekly Pack"></div>
+    <div class="row2">
+      <div class="field"><label>Price per Cycle (₹)*</label><input type="number" id="pl-price" placeholder="e.g. 900"></div>
+      <div class="field"><label>Tiffin/Dabba Count*</label><input type="number" id="pl-dabba" placeholder="e.g. 14"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="pl-cancel">Cancel</button>
+      <button class="btn btn-accent" id="pl-save">Add Plan</button>
+    </div>`);
+  el.querySelector('#pl-cancel').onclick = ()=>el.remove();
+  el.querySelector('#pl-save').onclick = ()=>{
+    const name = el.querySelector('#pl-name').value.trim();
+    const price = Number(el.querySelector('#pl-price').value);
+    const dabbaCount = Number(el.querySelector('#pl-dabba').value);
+    if(!name){ toast('Plan ka naam daalo','danger'); return; }
+    if(!price || price<=0){ toast('Valid price daalo','danger'); return; }
+    if(!dabbaCount || dabbaCount<=0){ toast('Valid dabba count daalo','danger'); return; }
+    state.customPlans.push({id:uid(), name, price, dabbaCount});
+    saveState(); toast('Plan added','mint'); el.remove(); render();
+  };
+}
+
+/* ============ CSV / EXPORT ============ */
+function toCSV(rows, headers){
+  const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  return [headers.join(','), ...rows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
+}
+function downloadFile(content, filename, type){
+  const blob = new Blob([content], {type});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function doExport(kind){
+  if(kind==='members'){
+    const rows = state.members.map(m=>({Name:m.name, Phone:m.phone, Category:m.category, BillingPlan:m.billingPlan||'permeal', JoinDate:m.joinDate, Pending:memberPending(m), TotalPaid:memberPaid(m)}));
+    downloadFile(toCSV(rows,['Name','Phone','Category','BillingPlan','JoinDate','Pending','TotalPaid']), 'members.csv','text/csv');
+  } else if(kind==='payments'){
+    const rows = state.payments.map(p=>({Date:p.date, Member:(state.members.find(m=>m.id===p.memberId)||{}).name||'', Amount:p.amount, Mode:p.mode, Note:p.note}));
+    downloadFile(toCSV(rows,['Date','Member','Amount','Mode','Note']), 'payments.csv','text/csv');
+  } else if(kind==='expenses'){
+    const rows = state.expenses.map(e=>({Date:e.date, Category:e.category, StaffName:e.staffName||'', Amount:e.amount, Note:e.note}));
+    downloadFile(toCSV(rows,['Date','Category','StaffName','Amount','Note']), 'expenses.csv','text/csv');
+  } else if(kind==='attendance'){
+    const rows=[];
+    for(const date in state.attendance){
+      for(const mid in state.attendance[date]){
+        const m = state.members.find(x=>x.id===mid);
+        const r = state.attendance[date][mid];
+        rows.push({Date:date, Member:m?m.name:mid, Lunch:r.lunch?'Yes':'No', Dinner:r.dinner?'Yes':'No'});
+      }
+    }
+    rows.sort((a,b)=>a.Date.localeCompare(b.Date));
+    downloadFile(toCSV(rows,['Date','Member','Lunch','Dinner']), 'attendance.csv','text/csv');
+  } else if(kind==='walkins'){
+    const rows = (state.walkins||[]).map(w=>({Date:w.date, Name:w.name, Phone:w.phone||'', Amount:w.amount, Note:w.note||''}));
+    downloadFile(toCSV(rows,['Date','Name','Phone','Amount','Note']), 'walkins.csv','text/csv');
+  } else if(kind==='backup'){
+    downloadFile(JSON.stringify(state,null,2), `mess-backup-${todayStr()}.json`, 'application/json');
+  }
+  toast('Export ready — check your downloads','mint');
+}
+function exportMemberAttendance(memberId){
+  const m = state.members.find(x=>x.id===memberId);
+  if(!m) return;
+  const rows=[];
+  Object.keys(state.attendance).sort().forEach(date=>{
+    const r = state.attendance[date][memberId];
+    if(r && (r.lunch || r.dinner)){
+      rows.push({Date:date, Lunch:r.lunch?'Yes':'No', Dinner:r.dinner?'Yes':'No'});
+    }
+  });
+  if(rows.length===0){ toast('Is member ka koi attendance record nahi hai','danger'); return; }
+  downloadFile(toCSV(rows,['Date','Lunch','Dinner']), `${m.name.replace(/[^a-z0-9]+/gi,'-')}-attendance.csv`, 'text/csv');
+  toast('Attendance exported for '+m.name,'mint');
+}
+
+/* ============ EVENTS ============ */
+function bindViewEvents(){
+  document.querySelectorAll('[data-nav]').forEach(b=>b.onclick = ()=>{
+    if(b.dataset.preselectMember){ currentReminderMemberId = b.dataset.preselectMember; currentReminderMessage=''; }
+    navigate(b.dataset.nav);
+  });
+  document.querySelectorAll('[data-open]').forEach(b=>b.onclick = ()=>navigate('memberDetail', b.dataset.open));
+  document.querySelectorAll('[data-edit-member]').forEach(b=>b.onclick = ()=>{
+    const m = state.members.find(x=>x.id===b.dataset.editMember); modalAddMember(m);
+  });
+  document.querySelectorAll('[data-del-member]').forEach(b=>b.onclick = ()=>{
+    if(confirm('Ye member delete karna hai? Attendance/payment history rahega but member list se hat jayega.')){
+      state.members = state.members.filter(x=>x.id!==b.dataset.delMember);
+      saveState(); toast('Member deleted'); render();
+    }
+  });
+  document.querySelectorAll('[data-star]').forEach(b=>b.onclick = ()=>{
+    const m = state.members.find(x=>x.id===b.dataset.star); m.favorite=!m.favorite; saveState(); render();
+  });
+  document.querySelectorAll('[data-del-payment]').forEach(b=>b.onclick = ()=>{
+    state.payments = state.payments.filter(p=>p.id!==b.dataset.delPayment); saveState(); toast('Payment removed'); render();
+  });
+  document.querySelectorAll('[data-del-expense]').forEach(b=>b.onclick = ()=>{
+    state.expenses = state.expenses.filter(e=>e.id!==b.dataset.delExpense); saveState(); toast('Expense removed'); render();
+  });
+  document.querySelectorAll('[data-del-staff]').forEach(b=>b.onclick = ()=>{
+    if(confirm('Ye staff member delete karna hai? Purani expenses history me naam rahega.')){
+      state.staff = state.staff.filter(s=>s.id!==b.dataset.delStaff); saveState(); toast('Staff removed'); render();
+    }
+  });
+  document.querySelectorAll('[data-del-walkin]').forEach(b=>b.onclick = ()=>{
+    state.walkins = state.walkins.filter(w=>w.id!==b.dataset.delWalkin); saveState(); toast('Walk-in removed'); render();
+  });
+  const addPlanBtn = document.getElementById('add-plan-btn');
+  if(addPlanBtn) addPlanBtn.onclick = ()=>modalAddPlan();
+  document.querySelectorAll('[data-del-plan]').forEach(b=>b.onclick = ()=>{
+    const inUse = state.members.some(m=>m.billingPlan==='plan:'+b.dataset.delPlan);
+    if(inUse){ toast('Ye plan kisi member ko assigned hai — pehle unka plan badlo','danger'); return; }
+    state.customPlans = state.customPlans.filter(p=>p.id!==b.dataset.delPlan); saveState(); toast('Plan removed'); render();
+  });
+  const wiSave = document.getElementById('wi-save');
+  if(wiSave) wiSave.onclick = ()=>{
+    const name = document.getElementById('wi-name').value.trim();
+    const amount = Number(document.getElementById('wi-amount').value);
+    const phone = document.getElementById('wi-phone').value.trim();
+    const date = document.getElementById('wi-date').value || todayStr();
+    const note = document.getElementById('wi-note').value.trim();
+    if(!name){ toast('Naam daalo','danger'); return; }
+    if(!amount || amount<=0){ toast('Valid amount daalo','danger'); return; }
+    state.walkins.push({id:uid(), name, phone, amount, date, note});
+    saveState(); toast('Walk-in added','mint'); render();
+  };
+  document.querySelectorAll('[data-export]').forEach(b=>b.onclick = ()=>doExport(b.dataset.export));
+  document.querySelectorAll('[data-export-member-attendance]').forEach(b=>b.onclick = ()=>exportMemberAttendance(b.dataset.exportMemberAttendance));
+
+  document.querySelectorAll('[data-cash-member]').forEach(b=>b.onclick = ()=>{
+    modalAddPayment(b.dataset.cashMember);
+  });
+  document.querySelectorAll('[data-qr-member]').forEach(b=>b.onclick = ()=>{
+    const m = state.members.find(x=>x.id===b.dataset.qrMember);
+    if(!m) return;
+    if(!state.settings.upiId){ toast('Pehle Settings me UPI ID daalo','danger'); return; }
+    openQRModal(memberPending(m), 'Pending Dues — '+m.name, m.id);
+  });
+  document.querySelectorAll('[data-qr-preset]').forEach(b=>b.onclick = ()=>{
+    const key = b.dataset.qrPreset;
+    const s = state.settings;
+    const map = {lunch:['Lunch', s.lunchPrice], dinner:['Dinner', s.dinnerPrice], '1x':['1-Time Mess (Monthly)', s.price1x], '2x':['2-Time Mess (Monthly)', s.price2x]};
+    const [label, amount] = map[key];
+    openQRModal(amount, label, null);
+  });
+  const qrCustomBtn = document.getElementById('qr-custom-generate');
+  if(qrCustomBtn) qrCustomBtn.onclick = ()=>{
+    const amount = Number(document.getElementById('qr-amount').value);
+    const mid = document.getElementById('qr-member').value;
+    openQRModal(amount, 'Mess Payment', mid || null);
+  };
+
+  document.querySelectorAll('[data-quick]').forEach(b=>b.onclick = ()=>{
+    const q = b.dataset.quick;
+    if(q==='addMember') modalAddMember();
+    if(q==='addPayment') modalAddPayment();
+    if(q==='addPaymentFor') modalAddPayment(b.dataset.mid);
+    if(q==='addExpense') modalAddExpense();
+    if(q==='addStaff') modalAddStaff();
+  });
+
+  // reminders
+  const rmMember = document.getElementById('rm-member');
+  if(rmMember) rmMember.onchange = (e)=>{ currentReminderMemberId = e.target.value || null; currentReminderMessage=''; render(); };
+  const rmGenerate = document.getElementById('rm-generate');
+  if(rmGenerate) rmGenerate.onclick = ()=>{
+    const mid = document.getElementById('rm-member').value;
+    const amount = document.getElementById('rm-amount').value;
+    const date = document.getElementById('rm-date').value;
+    if(!mid){ toast('Customer select karo','danger'); return; }
+    if(!amount || Number(amount)<=0){ toast('Valid due amount daalo','danger'); return; }
+    if(!date){ toast('Due date daalo','danger'); return; }
+    const m = state.members.find(x=>x.id===mid);
+    currentReminderMemberId = mid;
+    currentReminderMessage = buildReminderMessage(m.name, Math.round(Number(amount)), date);
+    currentReminderAmount = Math.round(Number(amount));
+    currentReminderDueDate = date;
+    render();
+    toast('Reminder message ready','mint');
+  };
+  const rmWhatsapp = document.getElementById('rm-whatsapp');
+  if(rmWhatsapp) rmWhatsapp.onclick = ()=>{
+    const msg = document.getElementById('rm-message').value.trim();
+    const m = state.members.find(x=>x.id===currentReminderMemberId);
+    if(!msg){ toast('Pehle message generate karo','danger'); return; }
+    if(!m || !m.phone){ toast('Is customer ka phone number save nahi hai — Members me add karo','danger'); return; }
+    const phone = normalizePhoneForLink(m.phone);
+    if(phone.length<11){ toast('Phone number sahi format me nahi hai','danger'); return; }
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    logReminder(m, 'whatsapp');
+  };
+  const rmSms = document.getElementById('rm-sms');
+  if(rmSms) rmSms.onclick = ()=>{
+    const msg = document.getElementById('rm-message').value.trim();
+    const m = state.members.find(x=>x.id===currentReminderMemberId);
+    if(!msg){ toast('Pehle message generate karo','danger'); return; }
+    if(!m || !m.phone){ toast('Is customer ka phone number save nahi hai — Members me add karo','danger'); return; }
+    const digits = (m.phone||'').replace(/\D/g,'');
+    window.location.href = `sms:${digits}?body=${encodeURIComponent(msg)}`;
+    logReminder(m, 'sms');
+  };
+
+  const searchInput = document.getElementById('member-search');
+  if(searchInput) searchInput.oninput = (e)=>{ memberSearch = e.target.value; render(); document.getElementById('member-search').focus(); document.getElementById('member-search').setSelectionRange(memberSearch.length, memberSearch.length); };
+  const importBtn2 = document.getElementById('import-members-btn');
+  if(importBtn2) importBtn2.onclick = ()=>modalImportMembers();
+
+  // attendance
+  const importAttBtn = document.getElementById('import-attendance-btn');
+  if(importAttBtn) importAttBtn.onclick = ()=>modalImportAttendance();
+  const attDate = document.getElementById('att-date');
+  if(attDate) attDate.onchange = (e)=>{ currentDate = e.target.value; render(); };
+  document.querySelectorAll('[data-date-shift]').forEach(b=>b.onclick = ()=>{
+    const d = new Date(currentDate+'T00:00:00'); d.setDate(d.getDate()+Number(b.dataset.dateShift));
+    currentDate = d.toISOString().slice(0,10); render();
+  });
+  const tifDate = document.getElementById('tif-date');
+  if(tifDate) tifDate.onchange = (e)=>{ currentDate = e.target.value; render(); };
+  document.querySelectorAll('[data-date-shift-tif]').forEach(b=>b.onclick = ()=>{
+    const d = new Date(currentDate+'T00:00:00'); d.setDate(d.getDate()+Number(b.dataset.dateShiftTif));
+    currentDate = d.toISOString().slice(0,10); render();
+  });
+  document.querySelectorAll('[data-toggle-meal]').forEach(b=>b.onclick = ()=>{
+    const [mid, meal] = b.dataset.toggleMeal.split('|');
+    if(!state.attendance[currentDate]) state.attendance[currentDate] = {};
+    if(!state.attendance[currentDate][mid]) state.attendance[currentDate][mid] = {lunch:false,dinner:false};
+    const prev = {...state.attendance[currentDate][mid]};
+    state.attendance[currentDate][mid][meal] = !state.attendance[currentDate][mid][meal];
+    lastAction = {type:'meal', date:currentDate, mid, prev};
+    saveState(); render();
+  });
+  document.querySelectorAll('[data-mark-all]').forEach(b=>b.onclick = ()=>{
+    const meal = b.dataset.markAll;
+    if(!state.attendance[currentDate]) state.attendance[currentDate] = {};
+    const prevSnapshot = JSON.parse(JSON.stringify(state.attendance[currentDate]));
+    state.members.filter(m=>m.active!==false).forEach(m=>{
+      if(!state.attendance[currentDate][m.id]) state.attendance[currentDate][m.id] = {lunch:false,dinner:false};
+      state.attendance[currentDate][m.id][meal] = true;
+    });
+    lastAction = {type:'markAll', date:currentDate, prevSnapshot};
+    saveState(); toast('All marked'); render();
+  });
+  const undoBtn = document.querySelector('[data-undo]');
+  if(undoBtn) undoBtn.onclick = ()=>{
+    if(!lastAction){ toast('Kuch undo karne ko nahi hai'); return; }
+    if(lastAction.type==='meal'){
+      state.attendance[lastAction.date][lastAction.mid] = lastAction.prev;
+    } else if(lastAction.type==='markAll'){
+      state.attendance[lastAction.date] = lastAction.prevSnapshot;
+    }
+    lastAction=null; saveState(); toast('Undone'); render();
+  };
+
+  // settings
+  const saveBiz = document.getElementById('save-business');
+  if(saveBiz) saveBiz.onclick = ()=>{
+    state.settings.messName = document.getElementById('set-messName').value.trim() || 'My Mess';
+    state.settings.ownerName = document.getElementById('set-ownerName').value.trim();
+    state.settings.contactNumber = document.getElementById('set-contact').value.trim();
+    state.settings.googleMapsLink = document.getElementById('set-maps').value.trim();
+    saveState(); toast('Saved','mint'); render();
+  };
+  const logoInput = document.getElementById('set-logo');
+  if(logoInput) logoInput.onchange = (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{ state.settings.logo = reader.result; saveState(); render(); toast('Logo updated','mint'); };
+    reader.readAsDataURL(file);
+  };
+  const logoRemove = document.getElementById('set-logo-remove');
+  if(logoRemove) logoRemove.onclick = ()=>{ state.settings.logo=null; saveState(); render(); };
+  const savePricing = document.getElementById('save-pricing');
+  if(savePricing) savePricing.onclick = ()=>{
+    state.settings.lunchPrice = Number(document.getElementById('set-lunch').value)||0;
+    state.settings.dinnerPrice = Number(document.getElementById('set-dinner').value)||0;
+    state.settings.price1x = Number(document.getElementById('set-1x').value)||0;
+    state.settings.price2x = Number(document.getElementById('set-2x').value)||0;
+    state.settings.dabba1x = Number(document.getElementById('set-dabba1x').value)||0;
+    state.settings.dabba2x = Number(document.getElementById('set-dabba2x').value)||0;
+    saveState(); toast('Pricing saved','mint'); render();
+  };
+  const saveUpi = document.getElementById('save-upi');
+  if(saveUpi) saveUpi.onclick = ()=>{
+    state.settings.upiId = document.getElementById('set-upiId').value.trim();
+    state.settings.upiName = document.getElementById('set-upiName').value.trim();
+    saveState(); toast('UPI details saved','mint'); render();
+  };
+  const themeBtn = document.getElementById('set-theme-btn');
+  if(themeBtn) themeBtn.onclick = toggleTheme;
+  const importBtn = document.getElementById('import-btn');
+  if(importBtn) importBtn.onclick = ()=>document.getElementById('import-file').click();
+  const importFile = document.getElementById('import-file');
+  if(importFile) importFile.onchange = (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        if(!data.members || !data.settings){ toast('Invalid backup file','danger'); return; }
+        state = data; saveState(); toast('Backup restored','mint'); render();
+      }catch(err){ toast('Backup file padh nahi paya','danger'); }
+    };
+    reader.readAsText(file);
+  };
+  const resetBtn = document.getElementById('reset-data');
+  if(resetBtn) resetBtn.onclick = ()=>{
+    if(confirm('Pura data delete ho jayega. Pakka?')){
+      state = defaultState(); saveState(); toast('Data reset'); render();
+    }
+  };
+}
+
+/* ============ THEME ============ */
+function toggleTheme(){
+  const body = document.body;
+  const newTheme = body.dataset.theme==='dark' ? 'light' : 'dark';
+  body.dataset.theme = newTheme;
+  state.settings.theme = newTheme;
+  saveState();
+}
+document.getElementById('theme-toggle').onclick = toggleTheme;
+
+/* ============ INIT ============ */
+async function startApp(){
+  await loadState();
+  if(state.settings.theme) document.body.dataset.theme = state.settings.theme;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-shell').style.display='block';
+  render();
+}
+function showLogin(errorMsg){
+  document.getElementById('app-shell').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  const errEl = document.getElementById('login-error');
+  if(errorMsg){ errEl.textContent = errorMsg; errEl.style.display='block'; } else { errEl.style.display='none'; }
+}
+const loginBtn = document.getElementById('login-btn');
+if(loginBtn) loginBtn.onclick = async ()=>{
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ showLogin('Email aur password dono bharo'); return; }
+  loginBtn.textContent = 'Logging in...';
+  try{
+    await fbAuth.signInWithEmailAndPassword(email, password);
+  }catch(e){
+    showLogin('Login fail hua — ' + (e.message||'galat email ya password'));
+  }
+  loginBtn.textContent = 'Login';
+};
+['login-email','login-password'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('login-btn').click(); });
+});
+const logoutBtn = document.getElementById('logout-btn');
+if(logoutBtn) logoutBtn.onclick = ()=>{
+  if(confirm('Logout karna hai?')){
+    if(firebaseReady && fbAuth) fbAuth.signOut();
+    else{ fbUser=null; showLogin(); }
+  }
+};
+
+(function init(){
+  if(firebaseReady && fbAuth){
+    fbAuth.onAuthStateChanged(async (user)=>{
+      fbUser = user;
+      if(user) await startApp();
+      else showLogin();
+    });
+  } else {
+    // Firebase SDK could not load (e.g. no internet) — fall back to local-only mode so the app still works offline
+    startApp();
+  }
+})();
+
+</script>
+</body>
+</html>
